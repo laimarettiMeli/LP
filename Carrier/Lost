@@ -1,0 +1,27 @@
+Carrier Lost
+
+SELECT DISTINCT
+shp.shp_shipment_id as shipment,
+SHP.shp_date_shipped_id as date_shipped,
+B.bpp_created_dt as data_bpp,
+SHP.shp_status_id as status,
+SHP.shp_substatus_id as substatus,
+SHP.shp_picking_type_id as picking_type,
+SHP.sit_site_id as País,
+serv.shp_carrier_ID_ajus as c_carrier,
+shp.SHP_ORDER_COST_USD SHP_ORDER_COST_USD,
+sum((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) AS BPP_CASHOUT_USD
+
+FROM WHOWNER.BT_CM_BUYER_PROTEC_PROGRAM B
+LEFT JOIN WHOWNER.BT_SHP_SHIPMENTS SHP ON SHP.shp_shipment_id=B.shp_shipment_id
+LEFT OUTER JOIN WHOWNER.LK_SHP_SHIPPING_SERVICES SERV ON SERV.shp_service_id=SHP.shp_service_id
+
+WHERE shp.shp_date_shipped_id BETWEEN '2020-01-01' AND  (current_date -1)
+AND b.bpp_budget IN ('mercado_envios','mediations')
+AND shp.SHP_SOURCE_ID = 'MELI'
+AND shp.shp_shipping_mode_id = 'me2'
+AND shp.shp_type = 'forward'
+AND substatus IN ('damaged', 'lost','stolen')
+and shp.shp_picking_type_id not in ('self_service', 'default')
+and shp.shp_picking_type_id is not null
+GROUP BY 1,2,3,4,5,6,7,8,9
