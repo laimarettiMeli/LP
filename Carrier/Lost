@@ -25,3 +25,4 @@ AND substatus IN ('damaged', 'lost','stolen')
 and shp.shp_picking_type_id not in ('self_service', 'default')
 and shp.shp_picking_type_id is not null
 GROUP BY 1,2,3,4,5,6,7,8,9
+--Nuevo comentario!
