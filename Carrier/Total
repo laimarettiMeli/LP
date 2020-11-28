@@ -1,0 +1,19 @@
+
+SELECT
+shp.SIT_SITE_ID as Pais
+,SHP.shp_picking_type_id as picking_type
+,shp_carrier_ID_ajus as c_carrier
+,shp.shp_date_shipped_id as date_shipped
+,sum(shp.SHP_ORDER_COST_USD) SHP_ORDER_COST_USD
+,count(distinct shp.shp_shipment_id) as Shipment
+FROM
+WHOWNER.BT_SHP_SHIPMENTS shp
+LEFT OUTER JOIN WHOWNER.LK_SHP_SHIPPING_SERVICES SERV ON SERV.shp_service_id=SHP.shp_service_id
+WHERE
+shp.shp_date_shipped_id BETWEEN '2020-01-01' and  current_date -1
+and shp.SHP_SOURCE_ID = 'MELI'
+and shp.shp_shipping_mode_id = 'me2'
+and shp.shp_type = 'forward'
+and shp.shp_picking_type_id not in ('self_service', 'default')
+and shp.shp_picking_type_id is not null
+group by 1,2,3,4
