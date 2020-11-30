@@ -1,4 +1,4 @@
-Carrier Lost
+--Carrier Lost
 
 SELECT DISTINCT
 shp.shp_shipment_id as shipment,
