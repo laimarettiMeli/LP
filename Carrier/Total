@@ -5,7 +5,7 @@ shp.SIT_SITE_ID as Pais
 ,shp_carrier_ID_ajus as c_carrier
 ,shp.shp_date_shipped_id as date_shipped
 ,sum(shp.SHP_ORDER_COST_USD) SHP_ORDER_COST_USD
-,count(distinct shp.shp_shipment_id) as Shipment
+,count(distinct shp.shp_shipment_id) as Total_Shipment
 FROM
 WHOWNER.BT_SHP_SHIPMENTS shp
 LEFT OUTER JOIN WHOWNER.LK_SHP_SHIPPING_SERVICES SERV ON SERV.shp_service_id=SHP.shp_service_id
