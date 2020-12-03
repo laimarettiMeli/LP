@@ -1,3 +1,4 @@
+
 SELECT 
 Pais--
  ,picking_type--
@@ -9,7 +10,7 @@ Pais--
  ,NULL as date_bpp--
  ,CAST((status) AS varchar(100))--
  ,CAST((substatus) AS varchar(100))--
- ,NULL as BPP_CASHOUT_USD--
+ ,CAST(BPP_CASHOUT_USD as float(10))--
  ,NULL as GMV
  ,'Totals' as Source
 FROM
@@ -23,6 +24,7 @@ shp.SIT_SITE_ID as Pais--
 ,NULL as shipment_Id
 ,NULL as status
 ,NULL as substatus
+,NULL as BPP_CASHOUT_USD
 
 FROM
 WHOWNER.BT_SHP_SHIPMENTS shp
@@ -80,3 +82,4 @@ AND substatus IN ('damaged', 'lost','stolen')
 and shp.shp_picking_type_id not in ('self_service', 'default')
 and shp.shp_picking_type_id is not null
 GROUP BY 1,2,3,4,5,6,7,8,9) as b
+
