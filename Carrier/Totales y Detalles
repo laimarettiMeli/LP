@@ -11,7 +11,7 @@ Pais--
  ,CAST((status) AS varchar(100))--
  ,CAST((substatus) AS varchar(100))--
  ,CAST(BPP_CASHOUT_USD as float(10))--
- ,NULL as GMV
+ ,0 as GMV
  ,'Totals' as Source
 FROM
 (SELECT
@@ -24,7 +24,7 @@ shp.SIT_SITE_ID as Pais--
 ,NULL as shipment_Id
 ,NULL as status
 ,NULL as substatus
-,NULL as BPP_CASHOUT_USD
+,0 as BPP_CASHOUT_USD
 
 FROM
 WHOWNER.BT_SHP_SHIPMENTS shp
@@ -40,7 +40,7 @@ group by 1,2,3,4) a
 
 UNION ALL
 
-SELECT 
+SELECT
 Pais--
  ,picking_type--
  ,c_carrier--
@@ -48,7 +48,8 @@ Pais--
  ,NULL as TotalGMV
  ,NULL as Total_Shipments--
  ,CAST(shipment_Id AS varchar(100)) --
- ,date_bpp--
+ --,SUBSTRING(date_bpp, 2, 2) +'-'+ SUBSTRING(date_bpp, 4, 2) +'-'+ SUBSTRING(date_bpp, 6, 2) as date_bpp--
+ ,CONCAT( SUBSTRING(date_bpp, 1, 2) ,'-', SUBSTRING(date_bpp, 3, 2) ,'-', SUBSTRING(date_bpp, 4, 2))
  ,CAST(status AS varchar(100))--
  ,CAST((substatus) AS varchar(100))--
  ,BPP_CASHOUT_USD--
