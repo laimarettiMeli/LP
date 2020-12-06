@@ -1,18 +1,18 @@
-
 SELECT 
-Pais--
+   Pais--
  ,picking_type--
  ,c_carrier--
  ,date_shipped--
  ,TotalGMV--
  ,Total_Shipments--
  ,CAST((shipment_Id) AS varchar(100))
- ,NULL as date_bpp--
+ ,CAST('1900-01-01' as DATE) as date_bpp--
  ,CAST((status) AS varchar(100))--
  ,CAST((substatus) AS varchar(100))--
- ,CAST(BPP_CASHOUT_USD as float(10))--
- ,0 as GMV
+ ,CAST(BPP_CASHOUT_USD as float(10))
+ ,CAST(GMV as float(10))
  ,'Totals' as Source
+ 
 FROM
 (SELECT
 shp.SIT_SITE_ID as Pais--
@@ -24,7 +24,8 @@ shp.SIT_SITE_ID as Pais--
 ,NULL as shipment_Id
 ,NULL as status
 ,NULL as substatus
-,0 as BPP_CASHOUT_USD
+,0.00 as BPP_CASHOUT_USD
+,0.00 as GMV
 
 FROM
 WHOWNER.BT_SHP_SHIPMENTS shp
@@ -40,17 +41,15 @@ group by 1,2,3,4) a
 
 UNION ALL
 
-SELECT
-Pais--
+SELECT 
+  Pais--
  ,picking_type--
  ,c_carrier--
  ,date_shipped--
  ,NULL as TotalGMV
  ,NULL as Total_Shipments--
  ,CAST(shipment_Id AS varchar(100)) --
- --,SUBSTRING(date_bpp, 2, 2) +'-'+ SUBSTRING(date_bpp, 4, 2) +'-'+ SUBSTRING(date_bpp, 6, 2) as date_bpp--
- ,date_bpp
- --,CONCAT( SUBSTRING(date_bpp, 0, 5) ,'-', SUBSTRING(date_bpp, 3, 2) ,'-', SUBSTRING(date_bpp, 7, 2))
+ ,date_bpp--
  ,CAST(status AS varchar(100))--
  ,CAST((substatus) AS varchar(100))--
  ,BPP_CASHOUT_USD--
@@ -84,4 +83,3 @@ AND substatus IN ('damaged', 'lost','stolen')
 and shp.shp_picking_type_id not in ('self_service', 'default')
 and shp.shp_picking_type_id is not null
 GROUP BY 1,2,3,4,5,6,7,8,9) as b
-
