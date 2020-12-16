@@ -1,3 +1,11 @@
+--Dropea las tablas para llenarlas con los nuevos resultados
+/* DROP TABLE LP_Carriers_Totals;
+ DROP TABLE LP_Carriers_Details;
+ DROP TABLE LP_Carriers_Totals_Details;
+*/
+--Creo tabla con totales
+CREATE MULTISET VOLATILE TABLE LP_Carriers_Totals AS 
+(
 SELECT 
    Pais--
  ,picking_type--
@@ -5,12 +13,12 @@ SELECT
  ,date_shipped--
  ,TotalGMV--
  ,Total_Shipments--
- ,CAST((shipment_Id) AS varchar(100))
+ ,CAST((shipment_Id) AS varchar(100)) as shipment_Id
  ,CAST('1900-01-01' as DATE) as date_bpp--
- ,CAST((status) AS varchar(100))--
- ,CAST((substatus) AS varchar(100))--
- ,CAST(BPP_CASHOUT_USD as float(10))
- ,CAST(GMV as float(10))
+ ,CAST((status) AS varchar(100)) as status--
+ ,CAST((substatus) AS varchar(100)) as substatus --
+ ,CAST(BPP_CASHOUT_USD as float(10)) as BPP_CASHOUT_USD
+ ,CAST(GMV as float(10)) as GMV
  ,'Totals' as Source
  
 FROM
@@ -21,9 +29,9 @@ shp.SIT_SITE_ID as Pais--
 ,shp.shp_date_shipped_id as date_shipped--
 ,sum(shp.SHP_ORDER_COST_USD) TotalGMV--
 ,count(distinct shp.shp_shipment_id) as Total_Shipments--
-,NULL as shipment_Id
-,NULL as status
-,NULL as substatus
+,'' as shipment_Id
+,'' as status
+,'' as substatus
 ,0.00 as BPP_CASHOUT_USD
 ,0.00 as GMV
 
@@ -39,8 +47,16 @@ and shp.shp_picking_type_id not in ('self_service', 'default')
 and shp.shp_picking_type_id is not null
 group by 1,2,3,4) a
 
-UNION ALL
 
+
+
+)
+WITH DATA PRIMARY INDEX (shipment_Id) ON COMMIT PRESERVE ROWS;
+--Fin crear tabla totales
+
+--Creo tabla detalles
+CREATE MULTISET VOLATILE TABLE LP_Carriers_Details AS 
+(
 SELECT 
   Pais--
  ,picking_type--
@@ -48,10 +64,10 @@ SELECT
  ,date_shipped--
  ,NULL as TotalGMV
  ,NULL as Total_Shipments--
- ,CAST(shipment_Id AS varchar(100)) --
+ ,CAST(shipment_Id AS varchar(100)) as shipment_Id --
  ,date_bpp--
- ,CAST(status AS varchar(100))--
- ,CAST((substatus) AS varchar(100))--
+ ,CAST(status AS varchar(100)) as status--
+ ,CAST((substatus) AS varchar(100)) as substatus--
  ,BPP_CASHOUT_USD--
  ,GMV
  ,'Details' as Source
@@ -83,3 +99,41 @@ AND substatus IN ('damaged', 'lost','stolen')
 and shp.shp_picking_type_id not in ('self_service', 'default')
 and shp.shp_picking_type_id is not null
 GROUP BY 1,2,3,4,5,6,7,8,9) as b
+)
+WITH DATA PRIMARY INDEX (shipment_Id) ON COMMIT PRESERVE ROWS;
+--Fin crear tabla detalles
+
+--Crear tabla Totals_Details
+CREATE MULTISET VOLATILE TABLE LP_Carriers_Totals_Details AS 
+(
+SELECT *
+FROM  LP_Carriers_Totals
+
+UNION ALL
+SELECT  *
+FROM  LP_Carriers_Details
+)
+WITH DATA PRIMARY INDEX (shipment_Id) ON COMMIT PRESERVE ROWS;
+--Fin crear tabla Totals_Details
+
+--Borro Outliers
+DELETE FROM LP_Carriers_Totals_Details WHERE 
+picking_type in('cross_dockgin','UNKNOWN')
+OR c_carrier in ('N/A')
+
+OR (Pais='MLA' AND c_carrier='CORREIOS')
+OR (Pais='MLB' AND c_carrier='OCASA')
+OR (Pais='MLM' AND c_carrier='OCA')
+OR (Pais='MLM' AND c_carrier='OCASA');
+
+--Actualizo la tabla para reemplazar valores de algunas columnas
+
+UPDATE laimaretti.lp_carriers_totals_details
+set 
+   c_carrier = OREPLACE (c_carrier, 'MOTONORTE', 'WEBPACK')
+  --,substatus= OREPLACE (substatus, 'stolen0','stolen') 
+  ;
+
+--Query Output
+SELECT * FROM laimaretti.lp_carriers_totals_details
+
