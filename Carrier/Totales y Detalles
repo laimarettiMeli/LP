@@ -1,8 +1,3 @@
---Dropea las tablas para llenarlas con los nuevos resultados
-/* DROP TABLE LP_Carriers_Totals;
- DROP TABLE LP_Carriers_Details;
- DROP TABLE LP_Carriers_Totals_Details;
-*/
 --Creo tabla con totales
 CREATE MULTISET VOLATILE TABLE LP_Carriers_Totals AS 
 (
@@ -46,9 +41,6 @@ and shp.shp_type = 'forward'
 and shp.shp_picking_type_id not in ('self_service', 'default')
 and shp.shp_picking_type_id is not null
 group by 1,2,3,4) a
-
-
-
 
 )
 WITH DATA PRIMARY INDEX (shipment_Id) ON COMMIT PRESERVE ROWS;
@@ -120,7 +112,6 @@ WITH DATA PRIMARY INDEX (shipment_Id) ON COMMIT PRESERVE ROWS;
 DELETE FROM LP_Carriers_Totals_Details WHERE 
 picking_type in('cross_dockgin','UNKNOWN')
 OR c_carrier in ('N/A')
-
 OR (Pais='MLA' AND c_carrier='CORREIOS')
 OR (Pais='MLB' AND c_carrier='OCASA')
 OR (Pais='MLM' AND c_carrier='OCA')
@@ -128,12 +119,12 @@ OR (Pais='MLM' AND c_carrier='OCASA');
 
 --Actualizo la tabla para reemplazar valores de algunas columnas
 
-UPDATE laimaretti.lp_carriers_totals_details
+UPDATE LP_Carriers_Totals_Details
 set 
    c_carrier = OREPLACE (c_carrier, 'MOTONORTE', 'WEBPACK')
   --,substatus= OREPLACE (substatus, 'stolen0','stolen') 
   ;
 
 --Query Output
-SELECT * FROM laimaretti.lp_carriers_totals_details
+SELECT * FROM LP_Carriers_Totals_Details 
 
