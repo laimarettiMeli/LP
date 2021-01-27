@@ -236,7 +236,8 @@ group by 1,2,3,4
 WITH DATA;-- PRIMARY INDEX (sit_site_id) ON COMMIT PRESERVE ROWS;
 --Fin Query Totales
 
---DROP TABLE output_table;
+DROP TABLE Temp_45.output_table;
+
 CREATE TABLE Temp_45.output_table AS (
   SELECT * FROM temp_45.temp_base
   UNION
@@ -259,7 +260,7 @@ set SHP_COMPANY_NAME = OREPLACE (SHP_COMPANY_NAME, 'MERCADOENVIOS', 'MERCADO ENV
 
 
 --INSERT INTO TEMP_45.LP_Colecta
-DROP TABLE Temp_45.output_table;
+
 
 SELECT COUNT(*) FROM Temp_45.output_table;
 
