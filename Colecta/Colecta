@@ -1,0 +1,277 @@
+
+
+--Creo tabla auxiliar con los filtros de shp
+
+
+
+--DROP TABLE temp_45.temp_shp_0;
+Create table  temp_45.temp_shp_0 as (
+      SELECT 
+      sit_site_id
+      ,shp.shp_shipment_id as shp_shipment_id
+      ,shp_sender_id
+      ,shp_datetime_created_id
+      ,shp_datetime_handling_id
+      ,shp_date_first_printed_id
+      ,shp_datetime_ready_to_ship_id
+      ,shp_datetime_shipped_id
+      ,shp_status_id
+      ,shp_substatus_id
+      ,shp_order_cost
+      ,shp_order_cost_usd
+      ,SHP_PICKING_TYPE_ID
+      ,shp_service_id
+      
+      FROM WHOWNER.BT_SHP_SHIPMENTS as shp
+      --left join WHOWNER.LK_SHP_SHIPMENTS_TIMES metrics on metrics.shp_shipment_id=shp.shp_shipment_id
+      WHERE 
+        shp.shp_picking_type_id in ('cross_docking','xd_drop_off')
+        AND shp.shp_substatus_id in ('delayed','picked_up','stolen','claimed_me')
+        AND shp.shp_status_id in ('not_delivered','ready_to_ship')
+        AND shp.shp_datetime_created_id between current_date -90 and current_date -1
+        --AND metrics.shp_in_hub_time_date is null
+        )
+      
+WITH DATA ;
+--fin crear tabla auxiliar de shp
+
+
+ --Creo tabla con las fechas de los estados de la tabla checkpoint
+
+--DROP TABLE temp_45.temp_chk;
+Create table  temp_45.temp_chk as 
+ 
+        ( SELECT * FROM 
+        
+        ( 
+        SELECT shp_site_id,shp_id,shp_sub_status,shp_checkpoint_date 
+        FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS 
+        WHERE 
+          shp_ID IN (SELECT distinct shp_shipment_id  FROM temp_45.temp_shp_0)
+        AND shp_sub_status is not null
+        AND shp_sub_status IN ('picked_up','in_pickup_list','AUTHORIZED_BY_CARRIER','rejected_in_hub','in_hub')-- agregar in hub y luego filtrar los nulos
+        AND shp_checkpoint_date between current_date -90 and current_date -1
+        )as chk
+        
+        PIVOT (
+                MIN(chk.shp_checkpoint_date) as chk_date
+                
+                FOR shp_sub_status
+                    IN (
+                    --estados preparandose para la colecta
+                        'in_pickup_list' AS in_pickup_list
+                        ,'AUTHORIZED_BY_CARRIER' AS AUTHORIZED_BY_CARRIER
+                        ,'picked_up' AS picked_up
+                        ,'rejected_in_hub' AS rejected_in_hub
+                        ,'in_hub' AS in_hub
+                        ) 
+             )chk
+          
+          WHERE in_hub_chk_date is null AND picked_up_chk_date is not null
+          )
+          
+WITH DATA;
+--select COUNT(*) FROM temp_45.temp_chk; --1730
+--select COUNT(*) from temp_chk where in_hub_chk_date is null;
+--select COUNT(*) from temp_chk where in_hub_chk_date is not null;
+--select COUNT(*) from temp_chk;
+
+--Drop de tabla shp inicial y me quedo solo con los shipment q no hayan entrado
+
+--DROP TABLE temp_45.temp_shp;
+Create table  temp_45.temp_shp as  (
+      SELECT *
+      
+      FROM temp_45.temp_shp_0
+      --left join WHOWNER.LK_SHP_SHIPMENTS_TIMES metrics on metrics.shp_shipment_id=shp.shp_shipment_id
+      WHERE 
+      shp_shipment_id IN (SELECT distinct shp_ID  FROM temp_45.temp_chk)
+        )
+      
+WITH DATA;-- PRIMARY INDEX (shp_shipment_id) ON COMMIT PRESERVE ROWS;
+
+--SELECT COUNT(*) FROM temp_45.temp_shp;--1730
+DROP TABLE temp_45.temp_shp_0;
+
+CREATE TABLE Temp_45.temp_TUnit as(
+SELECT SHP_LG_TR_RELATED_ENTITY_ID,SHP_FACILITY_ID,SIT_SITE_ID,shp_lg_transport_unit_id FROM WHOWNER.LK_SHP_LG_TRANSPORT_UNIT where SHP_LG_TR_STEP_TYPE = 'first_mile'
+) With Data;
+--Empieza query donde se hacen los join
+--DROP TABLE temp_45.temp_base;
+
+CREATE TABLE temp_45.temp_base AS (
+
+  select
+  shp.sit_site_id,
+  shp.shp_shipment_id,--
+  shh.shp_item_desc AS item_description,--
+  shh.shp_order_id,--
+  shp.shp_sender_id,--
+  CAST(shp_datetime_created_id as date) as shp_datetime_created_id,
+  CAST(shp_datetime_handling_id AS date) as shp_datetime_handling_id,
+  CAST(shp_date_first_printed_id AS date) as shp_date_first_printed_id,
+  CAST(shp_datetime_ready_to_ship_id AS date) as shp_datetime_ready_to_ship_id,
+  CAST(chk.picked_up_chk_date AS date) as date_picked_up,
+  CAST(shp_in_hub_time_date AS date) as shp_in_hub_time_date,
+  CAST(chk.AUTHORIZED_BY_CARRIER_chk_date AS date) as date_authorized_by_carrier,
+  CAST(chk.in_pickup_list_chk_date AS date) as date_in_packing_list,
+  CAST(chk.rejected_in_hub_chk_date AS date) as date_rejected_in_hub,
+  CAST(shp_datetime_shipped_id AS date) as shp_datetime_shipped_id,
+  shp_status_id,--
+  shp_substatus_id,--
+  shp_order_cost,
+  shp_order_cost_usd,--
+  shh.ODR_ITEM_DOL_UNIT_PRICE,
+  shh.SHP_QUANTITY,
+  shp_lg_transport_unit_status,--
+  cus.cus_nickname,  
+  o.SHP_FACILITY_ID,
+  shp_s.SHP_CARRIER_ID_AJUS as SHP_COMPANY_NAME,
+  r.SHP_LG_CODE,
+  UPPER(d.shp_lg_driver_first_name) ||' '|| UPPER(d.shp_lg_driver_last_name) AS driver_full_name,
+  t.SHP_INB_CARRIER_NAME,
+  t.TMS_TR_INB_TRUCK_ID as license_plate,
+  shp.SHP_PICKING_TYPE_ID
+  ,'Details' as Source
+
+--left join whowner.lk_shp_shipping_services shp_s ON sh.shp_service_id = shp_s.shp_service_id
+  from temp_45.temp_shp shp
+  left join WHOWNER.LK_SHP_SHIPMENTS_TIMES metrics on metrics.shp_shipment_id=shp.shp_shipment_id AND metrics.shp_in_hub_time_date is null
+  left join WHOWNER.BT_SHP_SHIPPING_ITEMS shh on shh.shp_shipment_id=shp.shp_shipment_id AND shh.sit_site_id=shp.sit_site_id
+  left join WHOWNER.LK_CUS_CUSTOMERS_DATA cus on shP.shp_sender_id=cus.CUS_CUST_ID and cus.SIT_SITE_ID_CUS=shp.sit_site_id
+  left join Temp_45.temp_TUnit o on shp.shp_shipment_id=o.SHP_LG_TR_RELATED_ENTITY_ID and o.SIT_SITE_ID = shp.sit_site_id
+  left join WHOWNER.BT_TMS_TRACKING t on t.SHP_SHIPMENT_ID=shp.shp_shipment_id and t.SIT_SITE_ID = shp.sit_site_id
+  left join WHOWNER.LK_SHP_LG_ORDER_TU otu on otu.shp_lg_transport_unit_id = o.shp_lg_transport_unit_id and otu.shp_lg_transport_unit_status = 'picked_up'
+  left join WHOWNER.BT_SHP_LG_ORDER ord on otu.shp_lg_order_id  = ord.shp_lg_order_id
+  left join WHOWNER.LK_SHP_LG_ROUTE_STOP rs on ord.shp_lg_route_stop_id  = rs.shp_lg_stop_id
+  left join WHOWNER.LK_SHP_LG_ROUTES r on r.shp_lg_route_id  = rs.shp_lg_route_id
+  
+  left join WHOWNER.LK_SHP_LG_DRIVERS d ON d.SHP_LG_DRIVER_ID =r.SHP_LG_DRIVER_ID
+  left join temp_45.temp_chk chk on chk.shp_id=shp.shp_shipment_id AND picked_up_chk_date is not null and in_hub_chk_date is not null
+  left join whowner.lk_shp_shipping_services shp_s ON shp.shp_service_id = shp_s.shp_service_id-- Para traer el carrier 
+  WHERE metrics.shp_in_hub_time_date is null
+  --o.SHP_LG_TR_STEP_TYPE = 'first_mile'  Filtra solo first mile para ver lo colectado
+  )
+WITH DATA;
+
+
+
+DROP TABLE temp_45.temp_shp;
+DROP TABLE temp_45.temp_chk;
+
+
+--Empieza query totales
+
+--Fin query totales
+--DROP TABLE temp_45.temp_Totales;
+Create table temp_45.temp_Totales AS (
+    
+ SELECT SIT_SITE_ID
+,0 as SHP_SHIPMENT_ID
+,' ' as item_description
+,0 as SHP_ORDER_ID
+,0 as SHP_SENDER_ID
+,CAST(SHP_DATE_CREATED_ID as date) as shp_datetime_created_id
+,CAST('1900-01-01' as date) as shp_datetime_handling_id
+,CAST('1900-01-01' as date) as shp_date_first_printed_id
+,CAST('1900-01-01' as date) as shp_datetime_ready_to_ship_id
+,CAST('1900-01-01' as date) as date_picked_up
+,CAST('1900-01-01' as date) as shp_in_hub_time_date
+,CAST('1900-01-01' as date) as date_authorized_by_carrier
+,CAST('1900-01-01' as date) as date_in_packing_list
+,CAST('1900-01-01' as date) as date_rejected_in_hub
+,CAST('1900-01-01' as date) as shp_datetime_shipped_id
+,' ' as SHP_STATUS_ID
+,' ' as SHP_SUBSTATUS_ID
+,SHP_ORDER_COST as SHP_ORDER_COST
+,SHP_ORDER_COST_USD as SHP_ORDER_COST_USD
+,0 as ODR_ITEM_DOL_UNIT_PRICE
+,Qty as SHP_QUANTITY
+,' ' as SHP_LG_TRANSPORT_UNIT_STATUS
+,' ' as CUS_NICKNAME
+,' ' as SHP_FACILITY_ID
+,SHP_CARRIER_ID_AJUS as SHP_COMPANY_NAME
+,' ' as SHP_LG_CODE
+,' ' as driver_full_name
+,' ' as SHP_INB_CARRIER_NAME
+,' ' as license_plate
+,SHP_PICKING_TYPE_ID as SHP_PICKING_TYPE_ID
+,'Totals' as Source
+
+FROM
+
+(
+select 
+sh.sit_site_id,
+sh.SHP_DATE_CREATED_ID,
+sh.shp_picking_type_id,
+shp_s.shp_carrier_ID_ajus,
+count (distinct shp_shipment_id) as Qty,
+sum (shp_order_cost) as SHP_ORDER_COST,
+sum (shp_order_cost_usd) as SHP_ORDER_COST_USD
+
+
+from WHOWNER.BT_SHP_SHIPMENTS sh
+--left join whowner.lk_shp_address addr_sender on sh.shp_sender_address=addr_sender.shp_add_id
+--left join LK_SEGMENTO_SELLERS s on (sh.shp_sender_id=s.cus_cust_id_sel)
+left join whowner.lk_shp_shipping_services shp_s ON sh.shp_service_id = shp_s.shp_service_id
+left join whowner.lk_shp_lg_transport_unit shp_l ON shp_l.shp_lg_tr_related_entity_id =sh.shp_shipment_id
+
+where sh.shp_picking_type_id IN ('cross_docking','xd_drop_off')
+and sh.shp_shipping_mode_id='me2'
+and sh.SHP_DATE_CREATED_ID BETWEEN current_date -90 and current_date -1
+and shp_l.SHP_LG_TR_STEP_TYPE = 'first_mile'
+
+group by 1,2,3,4
+) as a)
+        
+WITH DATA;-- PRIMARY INDEX (sit_site_id) ON COMMIT PRESERVE ROWS;
+--Fin Query Totales
+
+
+CREATE TABLE Temp_45.output_table AS (
+  SELECT * FROM temp_45.temp_base
+  UNION
+  SELECT * FROM temp_45.temp_Totales)
+WITH DATA;
+
+DROP TABLE temp_45.temp_base;
+DROP TABLE temp_45.temp_Totales;
+
+--Borro Outliers
+DELETE FROM Temp_45.output_table WHERE 
+SHP_COMPANY_NAME in('UPS','N/A');
+--Actualizo tablas con nombres ok
+UPDATE Temp_45.output_table
+set SHP_COMPANY_NAME = OREPLACE (SHP_COMPANY_NAME, 'MOTONORTE', 'WEBPACK');
+UPDATE Temp_45.output_table
+set SHP_COMPANY_NAME = OREPLACE (SHP_COMPANY_NAME, 'REPROCESOS CARRITO', 'LOGISTICS');
+UPDATE Temp_45.output_table
+set SHP_COMPANY_NAME = OREPLACE (SHP_COMPANY_NAME, 'MERCADOENVIOS', 'MERCADO ENVIOS');
+
+
+--INSERT INTO TEMP_45.LP_Colecta
+
+--Checks y delete de datos anteriore para actualizar con los nuevos
+SELECT COUNT(*) FROM Temp_45.output_table;
+SELECT COUNT(*) FROM Temp_45.LP_Colecta;
+
+DELETE FROM Temp_45.LP_Colecta WHERE shp_datetime_created_id BETWEEN current_date -90 and current_date -1;
+
+SELECT COUNT(*) FROM Temp_45.LP_Colecta;
+
+INSERT INTO Temp_45.LP_Colecta
+SELECT * FROM Temp_45.output_table;
+
+SELECT COUNT(*) FROM TEMP_45.LP_Colecta;
+
+-- Delete tables
+-- DROP TABLE Temp_45.temp_shp_0;
+-- DROP TABLE Temp_45.temp_shp;
+-- DROP TABLE Temp_45.temp_chk;
+-- DROP TABLE Temp_45.temp_Totales;
+-- DROP TABLE Temp_45.temp_base;
+DROP TABLE Temp_45.output_table;
+DROP TABLE Temp_45.temp_TUnit;
+
+SELECT * FROM Temp_45.LP_Colecta
