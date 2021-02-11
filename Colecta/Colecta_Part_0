@@ -3,8 +3,8 @@
 --Creo tabla auxiliar con los filtros de shp
 
 
---DELETE FROM temp_45.LP_Colecta
---where shp_datetime_created_id> date '2019-01-01';
+DELETE FROM temp_45.LP_Colecta
+where shp_datetime_created_id> date '2019-01-01';
 
 --DROP TABLE temp_45.temp_shp_0;
 Create table  temp_45.temp_shp_0 as (
@@ -135,7 +135,8 @@ CREATE TABLE temp_45.temp_base AS (
   shp_s.SHP_CARRIER_ID_AJUS as SHP_COMPANY_NAME,
   r.SHP_LG_CODE,
   UPPER(d.shp_lg_driver_first_name) ||' '|| UPPER(d.shp_lg_driver_last_name) AS driver_full_name,
-  t.SHP_INB_CARRIER_NAME,
+--t.SHP_INB_CARRIER_NAME,
+  c.SHP_COMPANY_name as SHP_INB_CARRIER_NAME ,
   t.TMS_TR_INB_TRUCK_ID as license_plate,
   shp.SHP_PICKING_TYPE_ID
   ,'Details' as Source
@@ -151,7 +152,7 @@ CREATE TABLE temp_45.temp_base AS (
   left join WHOWNER.BT_SHP_LG_ORDER ord on otu.shp_lg_order_id  = ord.shp_lg_order_id
   left join WHOWNER.LK_SHP_LG_ROUTE_STOP rs on ord.shp_lg_route_stop_id  = rs.shp_lg_stop_id
   left join WHOWNER.LK_SHP_LG_ROUTES r on r.shp_lg_route_id  = rs.shp_lg_route_id
-  
+  left join WHOWNER.LK_SHP_COMPANIES c on c.SHP_company_ID = r.shp_company_ID
   left join WHOWNER.LK_SHP_LG_DRIVERS d ON d.SHP_LG_DRIVER_ID =r.SHP_LG_DRIVER_ID
   left join temp_45.temp_chk chk on chk.shp_id=shp.shp_shipment_id AND picked_up_chk_date is not null and in_hub_chk_date is null--verifica q no haya entrado al hub, pero que si se haya colectado
   left join whowner.lk_shp_shipping_services shp_s ON shp.shp_service_id = shp_s.shp_service_id-- Para traer el carrier 
@@ -216,7 +217,8 @@ CAST(sh.SHP_DATE_CREATED_ID as date) as SHP_DATE_CREATED_ID,
 
 sh.shp_picking_type_id,
 shp_s.shp_carrier_ID_ajus,
-t.SHP_INB_CARRIER_NAME as SHP_INB_CARRIER_NAME,
+--t.SHP_INB_CARRIER_NAME as SHP_INB_CARRIER_NAME,
+c.SHP_COMPANY_name as SHP_INB_CARRIER_NAME,
 shp_l.SHP_FACILITY_ID as SHP_FACILITY_ID,
 MIN(CAST(r.shp_lg_init_date as date)) as shp_lg_init_date,
 count (distinct sh.shp_shipment_id) as Qty,
@@ -235,7 +237,7 @@ left join WHOWNER.LK_SHP_LG_ORDER_TU otu on otu.shp_lg_transport_unit_id = o.shp
 left join WHOWNER.BT_SHP_LG_ORDER ord on otu.shp_lg_order_id  = ord.shp_lg_order_id
 left join WHOWNER.LK_SHP_LG_ROUTE_STOP rs on ord.shp_lg_route_stop_id  = rs.shp_lg_stop_id
 left join WHOWNER.LK_SHP_LG_ROUTES r on r.shp_lg_route_id  = rs.shp_lg_route_id
-
+left join WHOWNER.LK_SHP_COMPANIES c on c.SHP_company_ID = r.shp_company_ID
 where sh.shp_picking_type_id IN ('cross_docking','xd_drop_off')
 and sh.shp_shipping_mode_id='me2'
 and sh.SHP_DATE_CREATED_ID BETWEEN DATE ${begin_date | type:date} and DATE ${end_date | type:date}
@@ -269,6 +271,10 @@ UPDATE Temp_45.LP_Colecta
 set SHP_COMPANY_NAME = OREPLACE (SHP_COMPANY_NAME, 'REPROCESOS CARRITO', 'LOGISTICS');
 UPDATE Temp_45.LP_Colecta
 set SHP_COMPANY_NAME = OREPLACE (SHP_COMPANY_NAME, 'MERCADOENVIOS', 'MERCADO ENVIOS');
+UPDATE Temp_45.LP_Colecta
+set shp_inb_carrier_name =sit_site_id || ' Others'
+WHERE shp_inb_carrier_name is null;
+
 
 
 --INSERT INTO TEMP_45.LP_Colecta
@@ -285,7 +291,7 @@ WITH DATA;
 DROP TABLE temp_45.output_table;
 DROP TABLE Temp_45.temp_TUnit;
 
-SELECT * FROM Temp_45.LP_Colecta
+
 --SELECT * FROM Temp_45.LP_Colecta
 --SELECT  SIT_SITE_ID,SHP_COMPANY_NAME, COUNT(*) FROM Temp_45.LP_Colecta group by 1,2
 
