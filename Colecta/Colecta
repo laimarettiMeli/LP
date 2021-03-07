@@ -301,7 +301,14 @@ CREATE TABLE Temp_45.output_table AS (
 WITH DATA;
 -----------------------------------------INSERTO INFO DENTRO DE TABLA COLECTA
 DELETE FROM temp_45.LP_Colecta
-where shp_datetime_created_id BETWEEN current_date -90000 and current_date -1;
+where shp_datetime_created_id BETWEEN current_date -90 and current_date -1;
 
 INSERT INTO Temp_45.LP_Colecta
     SELECT * FROM Temp_45.output_table;
+    
+--BORRO TABLAS QUE YA NO USO
+DROP TABLE Temp_45.temp_shp_FM;
+DROP TABLE temp_45.temp_shp;
+DROP TABLE temp_45.temp_Details;
+DROP TABLE temp_45.temp_Totales;
+DROP TABLE Temp_45.output_table;
