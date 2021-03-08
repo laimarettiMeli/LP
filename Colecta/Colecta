@@ -310,5 +310,5 @@ INSERT INTO Temp_45.LP_Colecta
 DROP TABLE Temp_45.temp_shp_FM;
 DROP TABLE temp_45.temp_shp;
 DROP TABLE temp_45.temp_Details;
-DROP TABLE temp_45.temp_Totales;
+DROP TABLE temp_45.temp_Totals;
 DROP TABLE Temp_45.output_table;
