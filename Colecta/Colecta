@@ -174,8 +174,8 @@ FROM temp_45.temp_shp shp
           --OUT || shp level =5392 --> 5935 con items
           
 -----------------------------------------------------------SE CREA TABLA DE TOTALES
---DROP TABLE temp_45.temp_Totales;
-Create table temp_45.temp_Totales AS (
+--DROP TABLE temp_45.temp_Totals;
+Create table temp_45.temp_Totals AS (
     
  SELECT 
 SIT_SITE_ID
@@ -297,7 +297,7 @@ GROUP BY 1,2,3,4,5,6
 CREATE TABLE Temp_45.output_table AS (
   SELECT * FROM temp_45.temp_details
   UNION
-  SELECT * FROM temp_45.temp_Totales)
+  SELECT * FROM temp_45.temp_Totals)
 WITH DATA;
 -----------------------------------------INSERTO INFO DENTRO DE TABLA COLECTA
 DELETE FROM temp_45.LP_Colecta
