@@ -1,0 +1,54 @@
+SELECT DISTINCT id_shp FROM (
+
+SELECT  distinct --10349942
+TU.shp_lg_tr_related_entity_id ID_SHP,
+r.shp_lg_facility_Id,
+C.shp_company_id ID_CARRIER,
+C.shp_company_name CARRIER,
+DR.shp_lg_driver_last_name, 
+DR.shp_lg_driver_first_name,
+r.SHP_LG_VEHICLE_PLATE_ID,
+O.shp_logistic_type as PICKING_TYPE,
+OTU.shp_lg_transport_unit_status STATUS_RUTA,
+R.shp_lg_init_date FECHA_RUTA,
+R.shp_lg_code AS NOMBRE_RUTA,
+OTU.shp_lg_scan_datetime AS FECHA_ESCANEO,
+--MAX(R.shp_lg_route_id) AS ROUTE_ID
+R.shp_lg_route_id,
+otu.shp_lg_transport_unit_status,
+otu.*,o.*
+/*SELECT
+DISTINCT 
+r.*,'fin Ruta'
+,rs.*,'fin r stop'
+,o.*,'fin order'
+,otu.*,'fin order tu'
+,c.*,'fin companies'
+,tu.*,'fin tu'*/
+
+
+FROM
+WHOWNER.LK_SHP_LG_ROUTES AS r
+INNER JOIN  WHOWNER.LK_SHP_LG_ROUTE_STOP AS rs ON (r.shp_lg_route_id= rs.shp_lg_route_id)
+INNER JOIN  WHOWNER.BT_SHP_LG_ORDER AS o  ON (o.shp_lg_route_stop_id  = rs.shp_lg_stop_id)
+INNER JOIN  WHOWNER.LK_SHP_LG_ORDER_TU AS otu ON (otu.shp_lg_order_id  = o.shp_lg_order_id)
+INNER JOIN  WHOWNER.lk_shp_companies AS C ON (c.shp_company_id = r.shp_company_id)
+INNER JOIN  WHOWNER.lk_shp_lg_transport_unit tu ON (otu.shp_lg_transport_unit_id = tu.shp_lg_transport_unit_id)
+INNER JOIN WHOWNER.LK_SHP_LG_DRIVERS DR ON (R.shp_lg_driver_id = DR.shp_lg_driver_id)
+
+WHERE
+--r.shp_lg_type like 'first_mile'
+--and
+TU.shp_lg_tr_related_entity_id in 
+(40112615409)
+--(SELECT DISTINCT SHP_SHIPMENT_ID FROM TEMP_45.LP_Colecta WHERE SHP_INB_CARRIER_NAME LIKE ('Others MCO'))
+
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12
+) as uno
+ORDER BY 1 DESC
+
+
+
+SEL TOP 1 *
+FROM
+WHOWNER.LK_SHP_LG_ROUTES
