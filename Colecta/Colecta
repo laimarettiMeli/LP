@@ -1,29 +1,12 @@
 
-  --                                                                                 QUERY COLECTAS
-  -- Details:
-  --   Se busca encontrar perdidas en el proceso de colecta.
-  --   La query se separa en dos partes, primero en "Details" y luego en "Totales". En "Details" se busca mostrar los carrier colectados que no llegaron al XD o XD_DO con los detalles de esos envios, por otro lado en "Totals" se summariza el total de los shp colectados en la operacion para luego calcular ratios.
-    
-  -- Process:
-  
-  --   0-Se borran los datos de los ultimos 90 Dias de la tabla LP_COLECTA
-    
-  --   *******Creacion tabla "Details"
-    
-  --   1-Se buscan los shp que todavia no tuvieron estado "in hub" en la tabla checkpoint
-  --   2-Se buscan las rutas de esos shp para encontrar cual fue el carrier que lo tenia a cargo al igual que el facility mediante las tablas:
-      
-  --       INPUT->TABLE-> OUTPUT->TABLE-> OUTPUT, etc
-  
-  --   shp-> LK_SHP_LG_TRANSPORT_UNIT -> MAX (shp_lg_transport_unit_id) -> LK_SHP_LG_ORDER_TU (WHERE shp_lg_transport_unit_status = 'picked_up' ) -> MAX (SHP_LG_ORDER_ID) -> BT_SHP_LG_ORDER ->shp_lg_ROUTE_stop_id -> LK_SHP_LG_ROUTE_STOP -> LK_SHP_LG_ROUTES -> Carrier, driver,plate,facility ID
-  --   3-Se buscan los atributos de los shp en la tabla bt shp como se ve en la tabla temporal "Base Totales"
-    
-  --   *******Creacion Tabla Totales
-    
-  --   *******Union Totals y Details
-  --   *******Insertar datos en la tabla temporal LP_COLECTA
---DELETE FROM temp_45.LP_Colecta
---where shp_datetime_created_id> date '2019-01-01'
+/*CREATE TABLE temp_45.LP_Colecta_Backup as (
+SELECT * FROM temp_45.LP_Colecta
+) WITH DATA;
+
+DELETE FROM temp_45.LP_Colecta WHERE shp_datetime_created_id > '2019-01-01'
+*/
+
+
 ----------------------------------------CREO TABLA CON LOS SHP QUE SON DE FM Y CON EL ULTIMO TRANSPORT UNIT ID PARA LUEGO BUSCAR LA RUTA Y SUS ATRIBUTOS
 --DROP TABLE Temp_45.temp_shp_FM;
  CREATE TABLE Temp_45.temp_shp_FM as(
@@ -85,7 +68,7 @@ Create table  temp_45.temp_shp as (
                 
         WHERE 
           shp.shp_picking_type_id in ('cross_docking','xd_drop_off')
-          AND shp.shp_substatus_id in ('delayed','picked_up','stolen','claimed_me')
+          AND shp.shp_substatus_id in ('delayed','picked_up','stolen','claimed_me','lost','damaged')
           AND shp.shp_status_id in ('not_delivered','ready_to_ship')
           AND shp.shp_datetime_created_id BETWEEN  current_date -90 and current_date -1
           AND chk.shp_sub_status is null
@@ -95,9 +78,6 @@ Create table  temp_45.temp_shp as (
 
 
 ----------------------Checks, qty de registros y que no haya ducplicados
-            -- SEL COUNT(*) FROM temp_45.temp_shp;
-            -- SEL  shp_shipment_id,COUNT(*) FROM temp_45.temp_shp GROUP BY 1 ORDER BY 2 DESC;
-            -- SEL * FROM temp_45.temp_shp WHERE shp_shipment_id in (40382852514);
 -----------------------------------------------------------SE BUSCAN LOS CARRIER, FACILITY ID Y RUTA DE TODOS LOS SHP ANTERIORES Y EL RESTO DE LOS DATOS.
 --DROP TABLE temp_45.temp_Details;
 Create table  temp_45.temp_Details as (
@@ -135,7 +115,6 @@ SELECT
   r.SHP_LG_VEHICLE_PLATE_ID as license_plate,
   shp.SHP_PICKING_TYPE_ID
   ,'Details' as Source
-  --,r.shp_company_id, shp.tms_carrier_in, shp.chk_carrier_in
   
 FROM temp_45.temp_shp shp
         -----------------------------------------------INICIO CHINO RUTAS
@@ -183,10 +162,6 @@ FROM temp_45.temp_shp shp
 
 )WITH DATA ;
 
-          --SEL COUNT(*) FROM temp_45.temp_Details;
-          -- SEL DISTINCT SIT_SITE_ID, SHP_INB_CARRIER_NAME FROM temp_45.temp_Details ORDER BY 1,2 ;
-          --OUT || shp level =5392 --> 5935 con items
-          
 -----------------------------------------------------------Borro el periodo de tiempo antes de ingresar
 DELETE FROM Temp_45.LP_Colecta WHERE source = 'Details' AND shp_datetime_created_id BETWEEN  current_date -90 and current_date -1;
 -----------------------------------------------------------Inserto Details en lp colecta
@@ -317,25 +292,6 @@ DROP TABLE temp_45.Carrier_FM;
 --DROP TABLE temp_45.temp_Totals;
 
 ----------------------------------CHECKS
----Check inb null
--- SELECT * FROM Temp_45.LP_Colecta where source = 'Details' AND SHP_INB_CARRIER_NAME is null;
--- SELECT YEAR(shp_datetime_created_id),MONTH(shp_datetime_created_id),SUM(SHP_ORDER_COST_USD) FROM Temp_45.LP_Colecta where source = 'Details' GROUP BY 1,2 ORDER BY 1,2 ASC;
--- --------------------------------------------------------Chequeo q no haya duplicados
--- SELECT COUNT(*),col.* FROM Temp_45.LP_Colecta col --WHERE shp_shipment_id in (40105975954,40102688636,40108422631)
--- GROUP BY 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33
--- HAVING COUNT(*)>1;
--- -----------------------------------------------------------Inserto Details en lp colecta
--- SELECT * FROM Temp_45.LP_Colecta where source = 'Details' AND SHP_INB_CARRIER_NAME is null;
--- SELECT YEAR(shp_datetime_created_id),MONTH(shp_datetime_created_id),SUM(SHP_ORDER_COST_USD) FROM Temp_45.LP_Colecta where source = 'Details' GROUP BY 1,2 ORDER BY 1,2 ASC;
--- SELECT * FROM Temp_45.LP_Colecta where source = 'Totals' AND SHP_INB_CARRIER_NAME is null;
--- SELECT YEAR(shp_datetime_created_id),MONTH(shp_datetime_created_id),SUM(SHP_ORDER_COST_USD) FROM Temp_45.LP_Colecta where source = 'Totals' GROUP BY 1,2 ORDER BY 1,2 ASC;
--- --------------------------------------------------------Chequeo q no haya duplicados
--- SELECT COUNT(*),col.* FROM Temp_45.LP_Colecta col WHERE source = 'Totals'
--- GROUP BY 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33
--- HAVING COUNT(*)>1;
--- SELECT DISTINCT SIT_SITE_ID,SHP_INB_CARRIER_NAME FROM temp_45.LP_COlecta WHERE source = 'Totals';
--- ----------------------------------------EVALUO LO QUE TIENE CARGADO
--- SELECT YEAR(shp_datetime_created_id) Y, month(shp_datetime_created_id) M,source,COUNT(*),SUM(SHP_ORDER_COST_USD) 
--- FROM Temp_45.LP_Colecta GROUP BY 1,2,3 ORDER BY 1,2,3;
+
 ----------------------------------QUERY FINAL
-SELECT * FROM Temp_45.LP_Colecta;
+SELECT * FROM Temp_45.LP_Colecta
