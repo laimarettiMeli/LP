@@ -5,7 +5,29 @@ SELECT * FROM temp_45.LP_Colecta
 
 DELETE FROM temp_45.LP_Colecta WHERE shp_datetime_created_id > '2019-01-01'
 */
+ --                                                                                 QUERY COLECTAS
+  -- Details:
+  --   Se busca encontrar perdidas en el proceso de colecta.
+  --   La query se separa en dos partes, primero en "Details" y luego en "Totales". En "Details" se busca mostrar los carrier colectados que no llegaron al XD o XD_DO con los detalles de esos envios, por otro lado en "Totals" se summariza el total de los shp colectados en la operacion para luego calcular ratios.
 
+  -- Process:
+
+  --   0-Se borran los datos de los ultimos 90 Dias de la tabla LP_COLECTA
+
+  --   *******Creacion tabla "Details"
+
+  --   1-Se buscan los shp que todavia no tuvieron estado "in hub" en la tabla checkpoint
+  --   2-Se buscan las rutas de esos shp para encontrar cual fue el carrier que lo tenia a cargo al igual que el facility mediante las tablas:
+
+  --       INPUT->TABLE-> OUTPUT->TABLE-> OUTPUT, etc
+
+  --   shp-> LK_SHP_LG_TRANSPORT_UNIT -> MAX (shp_lg_transport_unit_id) -> LK_SHP_LG_ORDER_TU (WHERE shp_lg_transport_unit_status = 'picked_up' ) -> MAX (SHP_LG_ORDER_ID) -> BT_SHP_LG_ORDER ->shp_lg_ROUTE_stop_id -> LK_SHP_LG_ROUTE_STOP -> LK_SHP_LG_ROUTES -> Carrier, driver,plate,facility ID
+  --   3-Se buscan los atributos de los shp en la tabla bt shp como se ve en la tabla temporal "Base Totales"
+
+  --   *******Creacion Tabla Totales
+
+  --   *******Union Totals y Details
+  --   *******Insertar datos en la tabla temporal LP_COLECTA
 
 ----------------------------------------CREO TABLA CON LOS SHP QUE SON DE FM Y CON EL ULTIMO TRANSPORT UNIT ID PARA LUEGO BUSCAR LA RUTA Y SUS ATRIBUTOS
 --DROP TABLE Temp_45.temp_shp_FM;
