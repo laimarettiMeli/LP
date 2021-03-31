@@ -1,0 +1,26 @@
+SELECT TOP 1 
+shp.shp_shipment_id,
+shp_i.SHP_ITEM_DESC,
+r.shp_lg_facility_Id,
+C.shp_company_id ID_CARRIER,
+C.shp_company_name CARRIER,
+DR.shp_lg_driver_last_name, 
+DR.shp_lg_driver_first_name,
+r.SHP_LG_VEHICLE_PLATE_ID,
+O.shp_logistic_type as PICKING_TYPE,
+OTU.shp_lg_transport_unit_status STATUS_RUTA,
+R.shp_lg_init_date FECHA_RUTA,
+R.shp_lg_code AS NOMBRE_RUTA,
+OTU.shp_lg_scan_datetime AS FECHA_ESCANEO,
+R.shp_lg_route_id,
+otu.shp_lg_transport_unit_status
+
+FROM WHOWNER.BT_SHP_SHIPMENTS shp
+                      LEFT JOIN WHOWNER.LK_SHP_LG_TRANSPORT_UNIT as tu ON tu.SHP_LG_TR_RELATED_ENTITY_ID=shp.shp_shipment_id
+                      LEFT JOIN WHOWNER.LK_SHP_LG_ORDER_TU AS otu ON otu.SHP_LG_TRANSPORT_UNIT_ID=tu.shp_lg_transport_unit_id
+                      LEFT JOIN WHOWNER.BT_SHP_LG_ORDER AS o ON o.shp_lg_order_id= otu.shp_lg_order_id
+                      LEFT JOIN WHOWNER.LK_SHP_LG_ROUTE_STOP as rstop ON rstop.shp_lg_stop_id=o.shp_lg_ROUTE_stop_id
+                      LEFT JOIN WHOWNER.LK_SHP_LG_ROUTES AS r ON r.shp_lg_route_id= rstop.shp_lg_route_id
+                      LEFT JOIN WHOWNER.BT_SHP_SHIPPING_ITEMS shp_i ON shp.shp_shipment_id=shp_i.shp_shipment_id
+                      LEFT JOIN WHOWNER.lk_shp_companies AS C ON c.shp_company_id = r.shp_company_id
+                      LEFT JOIN WHOWNER.LK_SHP_LG_DRIVERS DR ON R.shp_lg_driver_id = DR.shp_lg_driver_id
