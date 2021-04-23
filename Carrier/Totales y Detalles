@@ -9,20 +9,30 @@ INSERT INTO  temp_45.LP_LastMile
                 Pais ,picking_type ,c_carrier ,date_shipped ,TotalGMV ,Total_Shipments ,shipment_Id ,CAST('1900-01-01' as DATE) as date_bpp ,CAST(( 
                 status) AS varchar(100)) as status ,CAST((substatus) AS varchar(100)) as substatus ,CAST(BPP_CASHOUT_USD as float(10)) as BPP_CASHOUT_USD ,CAST(GMV as float(10)) as GMV , 
                 --'' as addres,
-                ' ' as city,CAST(latitude as varchar(10)) latitude,CAST(longitude as varchar(10)) longitude,zip_code,' ' as addres_ref
+                ' ' as city,CAST('0' as varchar(10)) latitude,CAST('0' as varchar(10)) longitude,CAST('0' as varchar(10)) as zip_code,' ' as addres_ref
                 ,'Totals' as Source 
                 FROM
-                (SELECT shp.SIT_SITE_ID as Pais,SHP.shp_picking_type_id as picking_type,shp_carrier_ID_ajus as c_carrier,shp.shp_date_shipped_id as date_shipped,
-                SHP_ADD_ZIP_CODE as zip_code
-                ,zcode.latitude latitude,zcode.longitude longitude
+                (SELECT 
+                shp.SIT_SITE_ID as Pais
+                ,SHP.shp_picking_type_id as picking_type
+                ,shp_carrier_ID_ajus as c_carrier
+                ,shp.shp_date_shipped_id as date_shipped
+                --SHP_ADD_ZIP_CODE as zip_code
+                --,zcode.latitude latitude,zcode.longitude longitude
                 --,AVERAGE(SHP_ADD_LATITUDE)latitude ,AVERAGE(SHP_ADD_LONGITUDE) longitud
-                ,sum(shp.SHP_ORDER_COST_USD) TotalGMV,count(distinct shp.shp_shipment_id) as Total_Shipments,' ' as shipment_Id ,'' as status ,'' as substatus ,0.00 as BPP_CASHOUT_USD ,0.00 as GMV
+                ,sum(shp.SHP_ORDER_COST_USD) TotalGMV
+                ,count(distinct shp.shp_shipment_id) as Total_Shipments
+                ,' ' as shipment_Id 
+                ,'' as status 
+                ,'' as substatus 
+                ,0.00 as BPP_CASHOUT_USD 
+                ,0.00 as GMV
                 
                 FROM
                 WHOWNER.BT_SHP_SHIPMENTS shp
                 LEFT OUTER JOIN WHOWNER.LK_SHP_SHIPPING_SERVICES SERV ON SERV.shp_service_id=SHP.shp_service_id
                 	LEFT JOIN WHOWNER.LK_SHP_ADDRESS shp_a on shp.shp_receiver_address=shp_a.shp_add_id
-                	LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
+                	--LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
                 WHERE
                 shp.shp_date_shipped_id BETWEEN current_date -10 and current_date -1
                 --shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
@@ -30,11 +40,11 @@ INSERT INTO  temp_45.LP_LastMile
                 and shp.shp_type = 'forward'
                 and shp.shp_picking_type_id not in ('self_service', 'default')
                 and shp.shp_picking_type_id is not null
-                group by 1,2,3,4,5,6,7) a;
+                group by 1,2,3,4,7,8,9,10,11) a;
 
                                               --TEST Totals
 
---SELECT pais,YEAR(date_shipped),MONTH(date_shipped), SUM(TotalGMV)/1000000 FROM temp_45.LP_Carrier_geo WHERE source ='Totals' GROUP BY 1,2,3 ORDER BY 1,2,3
+--SELECT pais,YEAR(date_shipped),MONTH(date_shipped), SUM(TotalGMV)/1000000 FROM temp_45.LP_LASTMILE WHERE source ='Totals' GROUP BY 1,2,3 ORDER BY 1,2,3
    
                                               -- Details 1
                                               
@@ -65,18 +75,19 @@ INSERT INTO temp_45.LP_LastMile
               
               (SELECT --DISTINCT
                shp.shp_shipment_id as shipment_Id, SHP.shp_date_shipped_id as date_shipped, SHP.shp_status_id as status, SHP.shp_substatus_id as substatus, SHP.shp_picking_type_id as picking_type, SHP.sit_site_id as Pais, serv.shp_carrier_ID_ajus as c_carrier, shp.SHP_ORDER_COST_USD GMV
-               ,SHP_ADD_ADDRESS_LINE addres,SHP_ADD_CITY_NAME city,
-               zcode.latitude,zcode.longitude,
-               SHP_ADD_ZIP_CODE zip_code,SHP_ADD_DELIVERY_PREFERENCE addres_ref
-               , sum((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) AS BPP_CASHOUT_USD ,MIN(B.bpp_created_dt) as date_bpp--CAST('1900-01-01' as DATE) as date_bpp,--
+              ,SHP_ADD_ADDRESS_LINE addres,SHP_ADD_CITY_NAME city
+              ,shp_add_latitude latitude,shp_add_longitude longitude,SHP_ADD_ZIP_CODE zip_code,SHP_ADD_DELIVERY_PREFERENCE addres_ref
+              ,sum((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) AS BPP_CASHOUT_USD
+              ,MIN(B.bpp_created_dt) as date_bpp--CAST('1900-01-01' as DATE) as date_bpp,-- 
               FROM WHOWNER.BT_CM_BUYER_PROTEC_PROGRAM B
               	LEFT JOIN WHOWNER.BT_SHP_SHIPMENTS SHP ON SHP.shp_shipment_id=B.shp_shipment_id
               	LEFT OUTER JOIN WHOWNER.LK_SHP_SHIPPING_SERVICES SERV ON SERV.shp_service_id=SHP.shp_service_id
               	LEFT JOIN WHOWNER.LK_SHP_ADDRESS shp_a on shp.shp_receiver_address=shp_a.shp_add_id
-              	LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
+              	
+              	--LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
               
               WHERE
-              shp.shp_date_shipped_id BETWEEN (current_date -60) AND  (current_date -1)
+              shp.shp_date_shipped_id BETWEEN (current_date -2) AND  (current_date -1)
               --shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
               AND substatus IN ('damaged', 'lost','stolen')
               and shp.shp_picking_type_id not in ('self_service', 'default')
@@ -138,7 +149,7 @@ INSERT INTO temp_45.LP_LastMile
                     THEN 'delayed'
                   ELSE 'NO' END) as substatus
             ,SHP_ADD_ADDRESS_LINE addres,SHP_ADD_CITY_NAME city
-            ,zcode.latitude,zcode.longitude,SHP_ADD_ZIP_CODE zip_code,SHP_ADD_DELIVERY_PREFERENCE addres_ref
+            ,shp_add_latitude latitude,shp_add_longitude longitude,SHP_ADD_ZIP_CODE zip_code,SHP_ADD_DELIVERY_PREFERENCE addres_ref
             
             ,sum((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) AS BPP_CASHOUT_USD
             ,MIN(B.bpp_created_dt) as date_bpp--CAST('1900-01-01' as DATE) as date_bpp,-- 
@@ -149,7 +160,7 @@ INSERT INTO temp_45.LP_LastMile
                 LEFT OUTER JOIN WHOWNER.BT_CM_CLAIMS c ON c.cla_claim_id = b.cla_claim_id and b.cla_claim_id >0
                 LEFT JOIN scoring.mercado_envios_empty_box eb ON eb.ord_order_id=c.order_id
                 LEFT JOIN WHOWNER.LK_SHP_ADDRESS shp_a on shp.shp_receiver_address=shp_a.shp_add_id
-                LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
+                --LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
             
             WHERE shp.shp_date_shipped_id BETWEEN (current_date -30) AND  (current_date -1)
             --shp.shp_date_shipped_id BETWEEN '2020-01-01' and '2020-03-01'
@@ -175,5 +186,25 @@ INSERT INTO temp_45.LP_LastMile
                                         
                                         --TEST Total
 --  SELECT pais,source,YEAR(date_shipped),MONTH(date_shipped), SUM(BPP_CASHOUT_USD), SUM(TOTALGMV) FROM temp_45.LP_LastMile GROUP BY 1,2,3,4 ORDER BY 1,2,3,4
+
+--Borro Outliers
+DELETE FROM temp_45.LP_LastMile WHERE 
+picking_type in('cross_dockgin','UNKNOWN')
+OR c_carrier in ('N/A')
+OR (Pais='MLA' AND c_carrier='CORREIOS')
+OR (Pais='MLB' AND c_carrier='OCASA')
+OR (Pais='MLM' AND c_carrier='OCA')
+OR (Pais='MLM' AND c_carrier='OCASA');
+
+--Actualizo la tabla para reemplazar valores de algunas columnas
+
+UPDATE temp_45.LP_LastMile
+set c_carrier = OREPLACE (c_carrier, 'MOTONORTE', 'WEBPACK');
+UPDATE temp_45.LP_LastMile
+set c_carrier = OREPLACE (c_carrier, 'REPROCESOS CARRITO', 'LOGISTICS');
+UPDATE temp_45.LP_LastMile
+set c_carrier = OREPLACE (c_carrier, 'MERCADOENVIOS', 'MERCADO ENVIOS');
+UPDATE temp_45.LP_LastMile
+set substatus= OREPLACE (substatus, 'stolen0','stolen');
 
 SELECT * FROM temp_45.LP_LastMile
