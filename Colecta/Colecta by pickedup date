@@ -1,0 +1,321 @@
+
+/*CREATE TABLE temp_45.LP_Colecta_v02_Backup as (
+SELECT * FROM temp_45.LP_Colecta_v02
+) WITH DATA;
+
+DELETE FROM temp_45.LP_Colecta_v02 WHERE shp_datetime_created_id > '2019-01-01'
+*/
+ --                                                                                 QUERY COLECTAS
+  -- Details:
+  --   Se busca encontrar perdidas en el proceso de colecta.
+  --   La query se separa en dos partes, primero en "Details" y luego en "Totales". En "Details" se busca mostrar los carrier colectados que no llegaron al XD o XD_DO con los detalles de esos envios, por otro lado en "Totals" se summariza el total de los shp colectados en la operacion para luego calcular ratios.
+
+  -- Process:
+
+  --   0-Se borran los datos de los ultimos 90 Dias de la tabla LP_COLECTA
+
+  --   *******Creacion tabla "Details"
+
+  --   1-Se buscan los shp que todavia no tuvieron estado "in hub" en la tabla checkpoint
+  --   2-Se buscan las rutas de esos shp para encontrar cual fue el carrier que lo tenia a cargo al igual que el facility mediante las tablas:
+
+  --       INPUT->TABLE-> OUTPUT->TABLE-> OUTPUT, etc
+
+  --   shp-> LK_SHP_LG_TRANSPORT_UNIT -> MAX (shp_lg_transport_unit_id) -> LK_SHP_LG_ORDER_TU (WHERE shp_lg_transport_unit_status = 'picked_up' ) -> MAX (SHP_LG_ORDER_ID) -> BT_SHP_LG_ORDER ->shp_lg_ROUTE_stop_id -> LK_SHP_LG_ROUTE_STOP -> LK_SHP_LG_ROUTES -> Carrier, driver,plate,facility ID
+  --   3-Se buscan los atributos de los shp en la tabla bt shp como se ve en la tabla temporal "Base Totales"
+
+  --   *******Creacion Tabla Totales
+
+  --   *******Union Totals y Details
+  --   *******Insertar datos en la tabla temporal LP_COLECTA
+
+----------------------------------------CREO TABLA CON LOS SHP QUE SON DE FM Y CON EL ULTIMO TRANSPORT UNIT ID PARA LUEGO BUSCAR LA RUTA Y SUS ATRIBUTOS
+--DROP TABLE temp_45.temp_shp_v02_FM_v02;
+ CREATE TABLE temp_45.temp_shp_v02_FM_v02 as(
+   SELECT SHP_LG_TR_RELATED_ENTITY_ID,MAX(shp_lg_transport_unit_id) shp_lg_transport_unit_id
+                FROM WHOWNER.LK_SHP_LG_TRANSPORT_UNIT 
+                WHERE SHP_LG_TR_STEP_TYPE = 'first_mile' --AND SHP_LG_TR_RELATED_ENTITY_ID=40313878628 
+                GROUP BY 1
+) With Data;
+--SELECT COUNT(*) FROM temp_45.temp_shp_v02_FM_v02;
+----------------------------------------CREO TABLA CON LOS CARRIER DE FM Y OTROS QUE VOY AGREGANDO COMO REPROCESO CARRITO
+--DROP TABLE temp_45.Carrier_FM_V02;
+CREATE TABLE temp_45.Carrier_FM_V02 as (
+SELECT DISTINCT shp_company_id FROM WHOWNER.LK_SHP_LG_ROUTES WHERE SHP_LG_TYPE = 'first_mile'
+)WITH DATA;
+
+INSERT INTO temp_45.Carrier_FM_V02 VALUES('17500940');
+-----------------------------------------------------------SE BUSCAN LOS SHP QUE NO TUVIERON ESTADO "IN HUB" EN CHK Y SON FM
+--DELETE FROM Temp_45.LP_Colecta_v02 WHERE SOURCE = 'Details' AND shp_datetime_created_id BETWEEN  date '2020-07-02' and date '2020-12-01'
+
+--DROP TABLE temp_45.temp_shp_v02;
+Create table  temp_45.temp_shp_v02 as (
+      SELECT shp.sit_site_id,shp.shp_shipment_id,shp_lg_transport_unit_id
+            ,shp_sender_id,shp_datetime_created_id,shp_datetime_handling_id,shp_date_first_printed_id,shp_datetime_ready_to_ship_id,shp_datetime_shipped_id
+            ,shp_status_id,shp_substatus_id,shp_order_cost,shp_order_cost_usd
+            ,shp.shp_service_id,SHP_PICKING_TYPE_ID
+            ,chk.shp_checkpoint_date as shp_in_hub_time_date
+            ,chk1.shp_checkpoint_date as picked_up_chk_date
+            ,chk2.shp_checkpoint_date as in_pickup_list_chk_date--
+            ,chk3.shp_checkpoint_date as AUTHORIZED_BY_CARRIER_chk_date
+            ,chk4.shp_checkpoint_date as rejected_in_hub_chk_date
+            ,chk_c_in.SHP_CARRIER_ID as chk_carrier_in,tms.SHP_INB_CARRIER_ID as tms_carrier_in
+            
+            
+      FROM WHOWNER.BT_SHP_SHIPMENTS as shp
+          ------------------------------------------------Filtro solo lo que sea First Mile
+          INNER JOIN temp_45.temp_shp_v02_FM_v02  as fm on fm.SHP_LG_TR_RELATED_ENTITY_ID=shp.shp_shipment_id
+          ------------------------------------------------Me quedo solo con lo que no tenga un in hub (se filtra en el where)
+          LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk ON chk.SHP_ID = shp.shp_shipment_id AND shp_sub_status = 'in_hub'
+          -----------------------------------------------Busco fecha de picked up del paquete y luego en where filtro lo que no sea null,(se haya colectado)
+          LEFT JOIN (SELECT SHP_ID,MAX(shp_checkpoint_date) shp_checkpoint_date FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS 
+            WHERE shp_sub_status = 'picked_up' GROUP BY 1) chk1 ON chk1.SHP_ID = shp.shp_shipment_id-- buscar los que tuvieron pick_up
+          -----------------------------------------------Busco fecha de in_pickup_list
+          LEFT JOIN (SELECT SHP_ID,MAX(shp_checkpoint_date) shp_checkpoint_date FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS 
+            WHERE shp_sub_status = 'in_pickup_list' GROUP BY 1) chk2 ON chk2.SHP_ID = shp.shp_shipment_id-- buscar fecha in picking list
+          -----------------------------------------------Busco fecha de AUTHORIZED_BY_CARRIER
+          LEFT JOIN (SELECT SHP_ID,MAX(shp_checkpoint_date) shp_checkpoint_date FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS 
+            WHERE shp_sub_status = 'AUTHORIZED_BY_CARRIER' GROUP BY 1) chk3 ON chk3.SHP_ID = shp.shp_shipment_id-- buscar fecha AUTHORIZED_BY_CARRIER
+          -----------------------------------------------Busco fecha de rejected_in_hub
+          LEFT JOIN (SELECT SHP_ID,MAX(shp_checkpoint_date) shp_checkpoint_date FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS 
+            WHERE shp_sub_status = 'rejected_in_hub' GROUP BY 1) chk4 ON chk4.SHP_ID = shp.shp_shipment_id-- buscar fecha AUTHORIZED_BY_CARRIER
+          -----------------------------------------------Busco Carrier IN in chk cuando los carrier pertenecen al listado de first mile o es reproceso carrito
+          LEFT JOIN   (SELECT chk.shp_id,chk.shp_carrier_id,chk_max.SHP_CHECKPOINT_ID FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk 
+                        INNER JOIN
+                      (SELECT shp_id,MAX(CAST(RIGHT(SHP_CHECKPOINT_ID,LENGTH(SHP_CHECKPOINT_ID)-(LOCATE('-', SHP_CHECKPOINT_ID, 1))) as int)) as SHP_CHECKPOINT_ID FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk
+                        INNER JOIN (SELECT DISTINCT shp_company_id FROM temp_45.Carrier_FM_V02) cfm ON cfm.shp_company_id=chk.shp_carrier_id GROUP BY 1) chk_max 
+                        ON chk.shp_id=chk_max.shp_id AND chk.SHP_CHECKPOINT_ID=chk_max.SHP_CHECKPOINT_ID AND chk.shp_carrier_id not in (0) ) chk_c_in ON chk_c_in.shp_id=shp.shp_shipment_id-- NO MORE SPOOL SPACE
+          -----------------------------------------------Busco Carrier IN in TMS
+          LEFT JOIN WHOWNER.BT_TMS_TRACKING tms ON shp.shp_shipment_id = tms.shp_shipment_id
+                
+        WHERE 
+          shp.shp_picking_type_id in ('cross_docking','xd_drop_off')
+          AND shp.shp_substatus_id in ('delayed','picked_up','stolen','claimed_me','lost','damaged')
+          AND shp.shp_status_id in ('not_delivered','ready_to_ship')
+          AND shp.shp_datetime_created_id BETWEEN  current_date -90 and current_date -1
+          AND chk.shp_sub_status is null
+          AND chk1.shp_checkpoint_date is not null
+          --AND shp.shp_shipment_id IN (40109194074)
+)WITH DATA ;
+
+
+----------------------Checks, qty de registros y que no haya ducplicados
+-----------------------------------------------------------SE BUSCAN LOS CARRIER, FACILITY ID Y RUTA DE TODOS LOS SHP ANTERIORES Y EL RESTO DE LOS DATOS.
+--DROP TABLE temp_45.temp_Details_v02;
+Create table  temp_45.temp_Details_v02 as (
+SELECT 
+  shp.sit_site_id,
+  shp.SHP_SHIPMENT_ID,--
+  shh.shp_item_desc AS item_description,--
+  shh.shp_order_id,--
+  shp.shp_sender_id,--
+  CAST(shp_datetime_created_id as date) as shp_datetime_created_id,
+  CAST(shp_datetime_handling_id AS date) as shp_datetime_handling_id,
+  CAST(shp_date_first_printed_id AS date) as shp_date_first_printed_id,
+  CAST(shp_datetime_ready_to_ship_id AS date) as shp_datetime_ready_to_ship_id,
+  CAST(shp.picked_up_chk_date AS date) as date_picked_up,
+  CAST(shp_in_hub_time_date AS date) as shp_in_hub_time_date,
+  CAST(shp.AUTHORIZED_BY_CARRIER_chk_date AS date) as date_authorized_by_carrier,
+  CAST(shp.in_pickup_list_chk_date AS date) as date_in_packing_list,
+  CAST(shp.rejected_in_hub_chk_date AS date) as date_rejected_in_hub,
+  CAST(shp_datetime_shipped_id AS date) as shp_datetime_shipped_id,
+  CAST(r.shp_lg_init_date AS date) as shp_lg_init_date,
+  shp_status_id,--
+  shp_substatus_id,--
+  shp_order_cost,
+  shp_order_cost_usd,--
+  shh.ODR_ITEM_DOL_UNIT_PRICE,
+  shh.SHP_QUANTITY,
+  r.shp_lg_transport_unit_status,--
+  cus.cus_nickname,  
+  r.SHP_LG_FACILITY_ID as SHP_FACILITY_ID,
+  shp_s.SHP_CARRIER_ID_AJUS as SHP_COMPANY_NAME,
+  r.SHP_LG_CODE,
+  UPPER(d.shp_lg_driver_first_name) ||' '|| UPPER(d.shp_lg_driver_last_name) AS driver_full_name,
+--t.SHP_INB_CARRIER_NAME,
+  UPPER(cpy.SHP_COMPANY_NAME) as SHP_INB_CARRIER_NAME ,
+  r.SHP_LG_VEHICLE_PLATE_ID as license_plate,
+  shp.SHP_PICKING_TYPE_ID
+  ,'Details' as Source
+  
+FROM temp_45.temp_shp_v02 shp
+        -----------------------------------------------INICIO CHINO RUTAS
+        LEFT JOIN
+                (
+                SELECT rutas.* 
+                FROM (
+                        SELECT shp.SHP_SHIPMENT_ID as shp_id,r.*,otu.shp_lg_transport_unit_status
+                            FROM temp_45.temp_shp_v02 shp
+                              LEFT JOIN WHOWNER.LK_SHP_LG_ORDER_TU AS otu ON otu.SHP_LG_TRANSPORT_UNIT_ID=shp.shp_lg_transport_unit_id
+                              LEFT JOIN WHOWNER.BT_SHP_LG_ORDER AS o ON o.shp_lg_order_id= otu.shp_lg_order_id
+                              LEFT JOIN WHOWNER.LK_SHP_LG_ROUTE_STOP as rstop ON rstop.shp_lg_stop_id=o.shp_lg_ROUTE_stop_id
+                              LEFT JOIN WHOWNER.LK_SHP_LG_ROUTES AS r ON r.shp_lg_route_id= rstop.shp_lg_route_id
+                        
+                ) as rutas
+                INNER JOIN 
+                
+                (SELECT shp.SHP_SHIPMENT_ID as shp_id,MAX(SHP_LG_LAST_UPDATED) AS Last_date
+                    FROM temp_45.temp_shp_v02 shp
+                      LEFT JOIN WHOWNER.LK_SHP_LG_ORDER_TU AS otu ON otu.SHP_LG_TRANSPORT_UNIT_ID=shp.shp_lg_transport_unit_id
+                      LEFT JOIN WHOWNER.BT_SHP_LG_ORDER AS o ON o.shp_lg_order_id= otu.shp_lg_order_id
+                      LEFT JOIN WHOWNER.LK_SHP_LG_ROUTE_STOP as rstop ON rstop.shp_lg_stop_id=o.shp_lg_ROUTE_stop_id
+                      LEFT JOIN WHOWNER.LK_SHP_LG_ROUTES AS r ON r.shp_lg_route_id= rstop.shp_lg_route_id
+                   GROUP BY 1) r_aux
+                  on rutas.SHP_LG_LAST_UPDATED=r_aux.Last_date AND rutas.shp_id=r_aux.shp_id
+                  
+                  
+                  ) r on r.shp_id=shp.shp_shipment_id
+             -------------------FIN CHINO RUTAS
+        LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA cus on shp.shp_sender_id=cus.CUS_CUST_ID and cus.SIT_SITE_ID_CUS=shp.sit_site_id
+        
+        LEFT JOIN WHOWNER.LK_SHP_LG_DRIVERS d ON d.SHP_LG_DRIVER_ID =r.SHP_LG_DRIVER_ID 
+        
+        LEFT JOIN WHOWNER.LK_SHP_COMPANIES cpy ON cpy.shp_company_id=--r.shp_company_id 
+          (CASE 
+          WHEN r.shp_company_id is not null THEN r.shp_company_id
+          WHEN r.shp_company_id is null and shp.tms_carrier_in is not null THEN shp.tms_carrier_in
+          WHEN r.shp_company_id is null and shp.tms_carrier_in is null and shp.chk_carrier_in is not null THEN shp.chk_carrier_in
+          ELSE r.shp_company_id
+          END)
+        
+        LEFT JOIN whowner.lk_shp_shipping_services shp_s ON shp.shp_service_id = shp_s.shp_service_id
+        
+        LEFT JOIN WHOWNER.BT_SHP_SHIPPING_ITEMS shh on shh.shp_shipment_id=shp.shp_shipment_id AND shh.sit_site_id=shp.sit_site_id
+
+)WITH DATA ;
+
+-----------------------------------------------------------Borro el periodo de tiempo antes de ingresar
+DELETE FROM Temp_45.LP_Colecta_v02 WHERE source = 'Details' AND shp_datetime_created_id BETWEEN  current_date -90 and current_date -1;
+-----------------------------------------------------------Inserto Details en lp colecta
+INSERT INTO Temp_45.LP_Colecta_v02
+    SELECT * FROM temp_45.temp_Details_v02;
+DROP TABLE temp_45.temp_shp_v02;
+DROP TABLE temp_45.temp_Details_v02;
+
+-----------------------------------------------------------Borro los ultimos 90 dias para luego insertarlos
+DELETE FROM Temp_45.LP_Colecta_v02 WHERE source = 'Totals' AND shp_datetime_created_id BETWEEN  current_date -90 and current_date -1;
+INSERT INTO Temp_45.LP_Colecta_v02  
+
+
+ SELECT 
+SIT_SITE_ID
+--,shp_shipment_id
+,0 as SHP_SHIPMENT_ID
+,' ' as item_description
+,0 as shp_order_id
+,0 as shp_sender_id
+,CAST(SHP_DATE_CREATED_ID as date) as shp_datetime_created_id
+,CAST('1900-01-01' as date) as shp_datetime_handling_id
+,CAST('1900-01-01' as date) as shp_date_first_printed_id
+,CAST('1900-01-01' as date) as shp_datetime_ready_to_ship_id
+,date_picked_up
+,CAST('1900-01-01' as date) as shp_in_hub_time_date
+,CAST('1900-01-01' as date) as date_authorized_by_carrier
+,CAST('1900-01-01' as date) as date_in_packing_list
+,CAST('1900-01-01' as date) as date_rejected_in_hub
+,CAST('1900-01-01' as date) as shp_datetime_shipped_id
+,shp_lg_init_date as shp_lg_init_date
+,' ' as shp_status_id
+,' ' as SHP_SUBSTATUS_ID
+,SHP_ORDER_COST as SHP_ORDER_COST
+,SHP_ORDER_COST_USD as SHP_ORDER_COST_USD
+,0 as ODR_ITEM_DOL_UNIT_PRICE
+,Qty as SHP_QUANTITY
+,' ' as SHP_LG_TRANSPORT_UNIT_STATUS
+,' ' as CUS_NICKNAME
+,SHP_FACILITY_ID--' ' as SHP_FACILITY_ID
+,SHP_CARRIER_ID_AJUS as SHP_COMPANY_NAME
+,' ' as SHP_LG_CODE
+,' ' as driver_full_name
+,SHP_INB_CARRIER_NAME
+,' ' as license_plate
+,SHP_PICKING_TYPE_ID as SHP_PICKING_TYPE_ID
+,'Totals' as Source
+--,' ' as shp_lg_route_id
+
+FROM
+
+(
+SELECT 
+
+  SHP.SIT_SITE_ID
+ --,SHP.SHP_SHIPMENT_ID
+ ,CAST(SHP.SHP_DATE_CREATED_ID AS DATE) AS SHP_DATE_CREATED_ID
+ ,CAST(chk1.shp_checkpoint_date AS DATE) AS date_picked_up
+ ,SHP.SHP_PICKING_TYPE_ID
+ ,SHP_S.SHP_CARRIER_ID_AJUS
+ ,CASE
+  WHEN UPPER(CPY.SHP_COMPANY_NAME) is not null THEN UPPER(CPY.SHP_COMPANY_NAME)
+  WHEN CPY.SHP_COMPANY_NAME is null and TMS.SHP_INB_CARRIER_NAME is not null THEN UPPER(TMS.SHP_INB_CARRIER_NAME)
+  END SHP_INB_CARRIER_NAME
+ ,R.SHP_LG_FACILITY_ID AS SHP_FACILITY_ID
+ ,MIN(CAST(r.shp_lg_init_date as date)) as shp_lg_init_date
+ ,count (distinct shp.shp_shipment_id) as Qty
+ ,sum (shp_order_cost) as SHP_ORDER_COST
+ ,sum (shp_order_cost_usd) as SHP_ORDER_COST_USD
+
+
+FROM WHOWNER.BT_SHP_SHIPMENTS shp
+          -----------------------------------------------INICIO CHINO RUTAS
+  INNER JOIN
+  (
+  SELECT rutas.* 
+  FROM (
+          SELECT shp.SHP_SHIPMENT_ID as shp_id,r.*,otu.shp_lg_transport_unit_status
+              FROM BT_SHP_SHIPMENTS shp
+                INNER JOIN temp_45.temp_shp_v02_FM_v02 tu ON TU.shp_lg_tr_related_entity_id=shp.SHP_SHIPMENT_ID
+                LEFT JOIN WHOWNER.LK_SHP_LG_ORDER_TU AS otu ON otu.SHP_LG_TRANSPORT_UNIT_ID=tu.shp_lg_transport_unit_id
+                LEFT JOIN WHOWNER.BT_SHP_LG_ORDER AS o ON o.shp_lg_order_id= otu.shp_lg_order_id
+                LEFT JOIN WHOWNER.LK_SHP_LG_ROUTE_STOP as rstop ON rstop.shp_lg_stop_id=o.shp_lg_ROUTE_stop_id
+                LEFT JOIN WHOWNER.LK_SHP_LG_ROUTES AS r ON r.shp_lg_route_id= rstop.shp_lg_route_id
+          
+  ) as rutas
+  INNER JOIN 
+  
+  (SELECT shp.SHP_SHIPMENT_ID as shp_id,MAX(SHP_LG_LAST_UPDATED) AS Last_date
+      FROM BT_SHP_SHIPMENTS shp
+        INNER JOIN temp_45.temp_shp_v02_FM_v02 tu ON TU.shp_lg_tr_related_entity_id=shp.SHP_SHIPMENT_ID
+        LEFT JOIN WHOWNER.LK_SHP_LG_ORDER_TU AS otu ON otu.SHP_LG_TRANSPORT_UNIT_ID=tu.shp_lg_transport_unit_id
+        LEFT JOIN WHOWNER.BT_SHP_LG_ORDER AS o ON o.shp_lg_order_id= otu.shp_lg_order_id
+        LEFT JOIN WHOWNER.LK_SHP_LG_ROUTE_STOP as rstop ON rstop.shp_lg_stop_id=o.shp_lg_ROUTE_stop_id
+        LEFT JOIN WHOWNER.LK_SHP_LG_ROUTES AS r ON r.shp_lg_route_id= rstop.shp_lg_route_id
+     GROUP BY 1) r_aux
+    on rutas.SHP_LG_LAST_UPDATED=r_aux.Last_date AND rutas.shp_id=r_aux.shp_id
+    
+    
+    ) r on r.shp_id=shp.shp_shipment_id   
+-----------------------------------------------FIN CHINO RUTAS       
+       
+          LEFT JOIN WHOWNER.LK_SHP_COMPANIES cpy ON cpy.shp_company_id=r.shp_company_id
+
+          LEFT JOIN whowner.lk_shp_shipping_services shp_s ON shp.shp_service_id = shp_s.shp_service_id
+          
+          LEFT JOIN WHOWNER.BT_TMS_TRACKING as tms ON tms.shp_shipment_id=shp.shp_shipment_id
+          
+          LEFT JOIN (SELECT SHP_ID,MAX(shp_checkpoint_date) shp_checkpoint_date FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS 
+              WHERE shp_sub_status = 'picked_up' GROUP BY 1) chk1 ON chk1.SHP_ID = shp.shp_shipment_id
+            
+WHERE shp.shp_picking_type_id IN ('cross_docking','xd_drop_off')
+AND shp.shp_shipping_mode_id='me2'
+AND shp_datetime_created_id BETWEEN  current_date -60 and current_date -1
+--AND shp.sit_site_id ='MLA'
+AND shp.SHP_DATE_CANCELLED_ID is null
+AND chk1.shp_checkpoint_date is not null
+--AND shp.shp_SHipment_id=40244288731
+GROUP BY 1,2,3,4,5,6,7
+)a;
+
+--DELETE FROM temp_45.LP_Colecta_v02 WHERE source = 'Totals';
+
+--BORRO TABLAS QUE YA NO USO
+DROP TABLE temp_45.temp_shp_v02_FM_v02;
+DROP TABLE temp_45.Carrier_FM_V02;
+--DROP TABLE temp_45.temp_shp_v02;
+--DROP TABLE temp_45.temp_Details_v02;
+--DROP TABLE temp_45.temp_Totals;
+
+----------------------------------CHECKS
+
+----------------------------------QUERY FINAL
+
+SELECT * FROM TEMP_45.LP_COLECTA_V02
