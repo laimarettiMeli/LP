@@ -1,0 +1,18 @@
+SEL 
+ logs.sit_site_id AS Sit_site_id,
+ UPPER(dri.SHP_LG_DRIVER_FIRST_NAME) ||' '|| UPPER(dri.SHP_LG_DRIVER_LAST_NAME) AS DRIVER_NAME,
+ dri.SHP_LG_DRIVER_ID AS DRIVER_ID,
+ comp.shp_company_name AS MLP,
+ dri.SHP_COMPANY_ID AS CODIGO_TRANSPORTADORA,
+ dri.SHP_LG_DRIVER_IDENTIF_TYPE AS DOCUMENTO,
+ dri.SHP_LG_DRIVER_IDENTIF_ID AS NUM_DOCUMENTO,
+ dri.SHP_LG_DRIVER_STATUS AS DRIVER_STATUS,
+ logs.SHP_LG_VEHICLE_PLATE_ID AS PLATE,
+ shp_lg_vehicle_type as Tipo_veículo,
+ shp_lg_facility_id,
+ MAX(CAST(logs.SHP_LG_ROUTE_END_DATE as date)) AS LAST_ROUTE_DATE
+
+FROM LK_SHP_LG_DRIVERS dri
+INNER JOIN BT_SHP_LG_SHIPMENTS_ROUTES logs ON logs.shp_lg_driver_id = dri.shp_lg_driver_id
+INNER JOIN WHOWNER.LK_SHP_COMPANIES comp ON comp.SHP_company_ID = logs.shp_company_ID
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11
