@@ -1,0 +1,30 @@
+select 
+lp.SHP_SHIPMENT_ID,
+lp.SIT_SITE_ID,
+lp.Clasificacion,
+lp.SHP_DATE_SHIPPED_ID,
+lp.SHP_LG_FACILITY_ID,
+lp.SHP_LOGISTIC_CENTER_ID,
+lp.PICKING_TYPE,
+lp.LAST_UPDATED,
+lp.SHP_ORDER_COST_USD,
+TMS_SELLER_INFO_NAME as "Seller Name",
+tms.tms_tr_logistic_center_id as "XD HUB Origen",
+tms.TMS_TR_DIS_TRUCK_ID as "Patente_TMS",
+tms.tms_tr_shipped_user as "Dispatch User",   
+tms.TMS_TR_PACKINGLIST_NUMBER as "HU",
+  RIGHT(
+  LEFT(
+    LEFT(tms.tms_tr_open_packing_user,
+      LOCATE(',',tms.tms_tr_open_packing_user)),LOCATE(',',tms.tms_tr_open_packing_user)-2)
+      ,LOCATE(',',tms.tms_tr_open_packing_user)-4)  as "Sorting User",
+
+MAX (CAST(TMS_TR_COLLECT_DATE as date)) as "Fecha de Coleta",
+MAX (CAST(tms.tms_tr_shipped_date as date)) as "Dispatch Date"
+
+FROM temp_45.Logistics_LP lp
+LEFT JOIN WHOWNER.BT_TMS_TRACKING tms ON (tms.shp_shipment_id = lp.shp_shipment_id)
+Where lp.LAST_UPDATED >= '2020-01-01' 
+AND lp.Clasificacion IN ('Lost on Way','Stale at Station','Stale on Way')
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+
