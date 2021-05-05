@@ -1,0 +1,34 @@
+select 
+chk.SHP_SHIPMENT_ID,
+shi.SHP_DATE_SHIPPED_ID,
+CAST(chk.shp_lg_last_updated as date) as LAST_UPDATED,
+shi.SIT_SITE_ID,
+logs.SHP_LG_ROUTE_ID,
+chk.SHP_LG_FACILITY_ID,
+chk.SHP_LG_STATUS,
+chk.SHP_LG_SUB_STATUS,
+(case when shi.SHP_PICKING_TYPE_ID in ('cross_docking','xd_drop_off') then 'XD'
+        when shi.SHP_PICKING_TYPE_ID in ('drop_off','drop_shipping') then 'DS'
+        when shi.SHP_PICKING_TYPE_ID = 'fulfillment' then 'FBM'
+        when shi.SHP_PICKING_TYPE_ID = 'self_service' then 'SELF_SERVICE'
+        else 'OTROS' end) as PICKING_TYPE ,
+comp.shp_company_name,
+logs.SHP_LG_VEHICLE_PLATE_ID,
+logs.SHP_LG_VEHICLE_TYPE,
+logs.SHP_LG_DRIVER_ID ,
+initcap(dri.SHP_LG_DRIVER_FIRST_NAME)||' '||initcap(dri.SHP_LG_DRIVER_LAST_NAME) AS Driver,
+shi.shp_order_cost_usd,
+shi.shp_logistic_center_id as XD_HUB_Origen
+from (select 
+ch.SHP_SHIPMENT_ID as id,max(ch.SHP_LG_SHIPMENT_CHECKPOINT_ID) check_id,max(rute.SHP_LG_ROUTE_ID) as rute_id
+from whowner.bt_shp_lg_shipment_checkpoints ch
+left join WHOWNER.BT_SHP_LG_SHIPMENTS_ROUTES rute ON rute.SHP_SHIPMENT_ID = ch.SHP_SHIPMENT_ID
+WHERE CAST(ch.shp_lg_last_updated as date) BETWEEN '2020-01-01' AND  (current_date -1)
+group by 1 ) lpship
+left join WHOWNER.bt_shp_lg_shipment_checkpoints chk  on lpship.id = chk.SHP_SHIPMENT_ID and lpship.check_id = chk.SHP_LG_SHIPMENT_CHECKPOINT_ID
+left join WHOWNER.BT_SHP_SHIPMENTS shi  on lpship.id = shi.SHP_SHIPMENT_ID 
+left join WHOWNER.BT_SHP_LG_SHIPMENTS_ROUTES logs ON logs.SHP_SHIPMENT_ID = lpship.id and lpship.rute_id = logs.SHP_LG_ROUTE_ID
+left JOIN WHOWNER.LK_SHP_COMPANIES comp ON comp.SHP_company_ID = logs.shp_company_ID
+left JOIN WHOWNER.LK_SHP_LG_DRIVERS dri ON dri.SHP_LG_DRIVER_ID = logs.SHP_LG_DRIVER_ID
+WHERE chk.shp_lg_status in ('on_way','at_station')
+and  chk.shp_lg_sub_status in ('for_return','blocked','missorted','problem_solving','missrouted','awaiting_tax_documentation')
