@@ -11,7 +11,8 @@ SELECT
   0 as shp_shipment_id,
   --s.shp_sender_id as Seller_id,
   0 as Seller_id,
-  s.shp_picking_type_id,
+  --s.shp_picking_type_id,
+  ' ' shp_picking_type_id,
   --s.shp_status_id ,
   ' ' as shp_status_id,
   --s.shp_substatus_id,
@@ -32,7 +33,7 @@ SELECT
        when carrier_id=849817033 and  s.sit_site_id='MLB' then 'Kangu'
        when carrier_id=1313953487 and s.sit_site_id='MCO' then 'Kangu'
        when carrier_id=17243954 and  s.sit_site_id='MLM' then 'Kangu'
-       when carrier_id=542124431 and  s.sit_site_id='MLM' then 'Intermedio SRL'
+       when carrier_id=542124431 and  s.sit_site_id='MLA' then 'Intermedio SRL'
        when carrier_id=1703373469 and  s.sit_site_id='MLC' then 'FLASHBOX'
        when shp_company_name='DHL' then 'DHL'
        when (agency_id like '%DO%' or shp_company_name='OCASA') and  s.sit_site_id='MLA' then 'Pick it'
@@ -73,24 +74,19 @@ SELECT
   COUNT(DISTINCT s.shp_shipment_id) as QTY,
   'Totals' as Source
 FROM WHOWNER.BT_SHP_SHIPMENTS as s
-  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec1 on ec1.shp_id = s.shp_shipment_id  and ec1.shp_status = 'ready_to_ship' and ec1.shp_sub_status = 'dropped_off'
-  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec2 on ec2.shp_id = s.shp_shipment_id  and ec2.shp_status = 'ready_to_ship' and ec2.shp_sub_status = 'picked_up'
-  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec3 on ec3.shp_id = s.shp_shipment_id  and ec3.shp_status = 'ready_to_ship' and ec3.shp_sub_status = 'in_hub'
-  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec6 on ec6.shp_id = s.shp_shipment_id  and ec6.shp_status = 'not_delivered'
-  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec7 on ec7.shp_id = s.shp_shipment_id  and ec7.shp_tracking_code in ('0623','0617','PL-0623','PL-0617') --Codigos lost y stolen
-  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec8 on ec8.shp_id = s.shp_shipment_id  and ec8.shp_tracking_code in ('0609','0633','0669') --Codigos de returned
+  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec1 on ec1.shp_id = S.SHP_SHIPMENT_ID AND ec1.SHP_TRACKING_CODE = '0000' and ec1.shp_status = 'ready_to_ship' and ec1.shp_sub_status = 'dropped_off'
   LEFT JOIN WHOWNER.LK_SHP_COMPANIES com  on com.shp_company_id=ec1.shp_carrier_id
   LEFT JOIN lk_shp_address a2 ON s.shp_sender_address = a2.shp_add_id
   LEFT JOIN WHOWNER.BT_TMS_TRACKING tms on tms.shp_shipment_id=s.shp_shipment_id
   --LEFT JOIN WHOWNER.BT_CM_BUYER_PROTEC_PROGRAM B on s.shp_shipment_id=B.shp_shipment_id
-WHERE s.sit_site_id in ( 'MLB','MLA','MLM','MLC','MCO') AND --'MLC','MCO'
+WHERE s.sit_site_id in ('MLB','MLA','MLM','MLC','MCO') AND --'MLC','MCO'
       --s.shp_date_handling_id BETWEEN  '2021-01-01' and current_date -2 AND--${begin_date | type:date} and ${end_date | type:date} AND
       (ec1.shp_checkpoint_date + interval '1' hour)  BETWEEN  DATE '2021-01-01' and current_date -2 AND
       s.shp_picking_type_id in ( 'cross_docking','xd_drop_off','drop_off','fulfillment') AND
       s.shp_source_id = 'MELI' --Envios solo del marketplace
       AND s.shp_shipping_mode_id = 'me2'
-      AND s.shp_type = 'forward' and
-      ec1.shp_checkpoint_date is not null-- AND
+      AND s.shp_type = 'forward' -- and
+      --ec1.shp_checkpoint_date is not null AND
       --ec2.shp_checkpoint_date is null AND--Este campo muestra si fue colectado del place o no. Si es null es que no fue colectado
       --ec3.shp_checkpoint_date is null AND--Doble check del estado anterior por si se olvidaron de bipear el picked up
       --s.shp_datetime_shipped_id is null AND--Verigica que no se bipeo en el xd
@@ -100,12 +96,12 @@ GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,21,22,23,24,25,26,29,31
 
 
 -----------------------------------------------------DETAILS
---DROP TABLE temp_45.LP_Places;
-create table  temp_45.LP_Places_Details as (
 
+--DROP TABLE temp_45.LP_Places_Details_V0
+CREATE TABLE temp_45.LP_Places_Details_V0 as (
 SELECT
   s.sit_site_id,
-  s.shp_shipment_id,-- as shp_id,
+  s.shp_shipment_id as shp_id,
   --' ' as shp_shipment_id,
   s.shp_sender_id as Seller_id,
   s.shp_picking_type_id,
@@ -125,7 +121,7 @@ SELECT
        when carrier_id=849817033 and  s.sit_site_id='MLB' then 'Kangu'
        when carrier_id=1313953487 and s.sit_site_id='MCO' then 'Kangu'
        when carrier_id=17243954 and  s.sit_site_id='MLM' then 'Kangu'
-       when carrier_id=542124431 and  s.sit_site_id='MLM' then 'Intermedio SRL'
+       when carrier_id=542124431 and  s.sit_site_id='MLA' then 'Intermedio SRL'--Places
        when carrier_id=1703373469 and  s.sit_site_id='MLC' then 'FLASHBOX'
        when shp_company_name='DHL' then 'DHL'
        when (agency_id like '%DO%' or shp_company_name='OCASA') and  s.sit_site_id='MLA' then 'Pick it'
@@ -133,7 +129,7 @@ SELECT
        when carrier_id=10 then 'Propios Meli'
        else 'Sin clasificar' end Agregador_manual,
   ec6.shp_sub_status estado_not_del,
-  tms.TMS_TR_PROCES_TYPE  Hub_picking_Type, --Datos de tms
+  tms.TMS_TR_PROCES_TYPE Hub_picking_Type, --Datos de tms
   tms.TMS_HUB_STATUS_ID  Hub_Status,
   tms.tms_tr_logistic_center_id  LC ,
   tms.shp_inb_reject_reason,
@@ -176,8 +172,56 @@ WHERE s.sit_site_id in ( 'MLB','MLA','MLM','MLC','MCO') AND --'MLC','MCO'
       s.shp_datetime_shipped_id is null AND--Verigica que no se bipeo en el xd
       s.shp_datetime_delivered_id is null--Verifica que no se entregó
 GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,30,31
-)with data;-- primary index(shp_shipment_id);-- ON COMMIT PRESERVE ROWS;
+)WITH DATA;
+-----------------------------------------------------DETAILS SIN DUPLICADOS
 
+--DROP TABLE temp_45.LP_Places_Details;
+CREATE TABLE  temp_45.LP_Places_Details as (
+
+WITH
+limpieza_duplicados as
+  (SELECT shp_id, min(fecha_dropoff)fecha_dropoff,max(fecha_not_Delivered) fecha_not_Delivered
+   FROM temp_45.LP_Places_Details_V0
+   group by 1 )
+, limpieza_duplicados_2 as
+  (select distinct a.* from temp_45.LP_Places_Details_V0 as  a inner join limpieza_duplicados b on a.fecha_dropoff=b.fecha_dropoff  
+    and a.shp_id=b.shp_id and coalesce (cast(a.fecha_not_Delivered as varchar(30)),'0')=coalesce (cast(b.fecha_not_Delivered as varchar(30)),'0'))
+,analisis_con_bpp as (
+  Select DISTINCT a.*
+         ,sum(bpp_Amt) over (partition by a.shp_id) bpp_Amtt ,
+         sum(bpp_instant_Recovery_amt)  over (partition by a.shp_id)bpp_instant_Recovery_amtt,
+         sum(bpp_late_recoveries_amt) over (partition by a.shp_id)bpp_late_recoveries_amtt,
+         (bpp_Amtt-bpp_instant_Recovery_amtt-bpp_late_recoveries_amtt) Cashout_bpp,
+         case when Cashout_bpp>0 then 1 else 0 end flg_cashout_bpp,
+         min (bpp_created_dt)over (partition by a.shp_id) bpp_dt,
+         sum(approved_amt) over (partition by a.shp_id) Boni_amt,
+         case when Boni_amt>0 then 1 else 0 end flg_boni,
+         min (created_at) over (partition by a.shp_id) boni_dt,
+         (coalesce(Cashout_bpp,0)+coalesce(Boni_amt,0)) total_cashout,
+         case when total_cashout>0 then 1 else 0 end flg_CO
+  from limpieza_duplicados_2 as a
+  left join BT_CM_BUYER_PROTEC_PROGRAM bb on a.shp_id = bb.shp_shipment_id
+  left join BT_BPP_BONIFICADOR bo on  bo.shipping_id=a.shp_id
+)
+,tabla_final as (select d.*, 'FM-1' as step,
+              tms_dev_inb_included_at,
+              case when tms_dev_inb_included_at is not null then 1 else 0 end Tuvo_dev
+  from  analisis_con_bpp d
+  left join BT_TMS_DEVOLUTIONS dev on d.shp_id=dev.shp_shipment_id)
+
+
+select 
+SIT_SITE_ID,shp_id,Seller_id,SHP_PICKING_TYPE_ID,SHP_STATUS_ID,SHP_SUBSTATUS_ID,SHP_ADD_ZIP_CODE,carrier_id,agency_id,SHP_COMPANY_NAME,Agregador_manual,estado_not_del,Hub_picking_Type,Hub_Status,LC,SHP_INB_REJECT_REASON,SHP_INB_CARRIER_NAME,fecha_handling,fecha_dropoff,fecha_pickup,fecha_inhub,fecha_not_delivered,fecha_extraviado,fecha_returned,fecha_salidaXD,fecha_delivery,Order_cost,Order_Cost_USD,BPP_CASHOUT_USD,QTY,Source
+from tabla_final
+where Tuvo_dev=0  and --Me quedo con los que no tuvieron devolucion en tms tracking
+      --shp_company_name in ('Intermedio SRL', 'Pegaki', 'Kangu') and
+      --shp_id in (40362764650) and
+      --(hub_status in ('cancelled','picked_up') or hub_status is null ) and --Me quedo solo con los casos de hub status validados hasta el momento
+      (fecha_returned is null or (fecha_returned is not null and fecha_extraviado is not null)) --Envios que no retornaron o  retornaron pero tienen novedad de lost o stolen
+)WITH DATA;
+
+DROP TABLE temp_45.LP_Places_Details_V0;
+-------------------------------------------------------INSERTO RESULTADOS EN TABLA FINAL
 
 --DROP TABLE temp_45.LP_Places;
 DELETE FROM temp_45.LP_Places;
@@ -192,3 +236,5 @@ INSERT INTO temp_45.LP_Places
 SEL * FROM temp_45.LP_Places_Totals;
 DROP TABLE temp_45.LP_Places_Totals;
 
+--SELECT * FROM TEMP_45.LP_PLACES WHERE SHP_SHIPMENT_ID IN (40362764650)
+--------Test eliminar duplicados de details
