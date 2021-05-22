@@ -192,19 +192,3 @@ INSERT INTO temp_45.LP_Places
 SEL * FROM temp_45.LP_Places_Totals;
 DROP TABLE temp_45.LP_Places_Totals;
 
-
-SEL
-source,SUM(Order_Cost_USD),SUM(QTY) 
-FROM temp_45.LP_Places
-WHERE CAST(fecha_dropoff as DATE) = '2021-05-10'
-AND SIT_SITE_ID IN ('MCO')
-GROUP BY 1;
-
-SELECT
-shp_shipment_id,COUNT(*)
-FROM temp_45.LP_Places
-GROUP BY 1
-ORDER BY 2 DESC;
-
-SELECT * FROM temp_45.LP_Places
-WHERE SHP_SHIPMENT_ID IN(40362764650)
