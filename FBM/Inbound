@@ -1,1 +1,96 @@
-hola
+
+CREATE TABLE TEMP_45.LP_INSURANCE AS 
+(
+    SELECT
+         ope.INBOUND_ID          
+      --  ,shipment.fn_api_timezone(ope.sit_site_id, ope.INB_APPOINTMENT_DATETIME)  as  INB_APPOINTMENT_DATETIME_TZ
+     --   ,shipment.fn_api_timezone(ope.sit_site_id, ope.INB_ARRIVAL_DATETIME)  as  INB_ARRIVAL_DATETIME_TZ
+     --   ,shipment.fn_api_timezone(ope.sit_site_id, ope.INB_RECEPTION_DATETIME)  as  INB_RECEPTION_DATETIME_TZ
+         ,ope.CUS_NICKNAME                                                                              
+        ,ope.CUS_CUST_ID                                                                               
+        ,ope.INVENTORY_ID                                                                              
+        ,ope.SIT_SITE_ID                                                                               
+        ,ope.WAREHOUSE_ID                                                                              
+        ,ope.INB_QUANTITY                                                                              
+        ,ope.INB_RCPT_TOTAL_QTY                                                                        
+        ,ope.INB_STATUS                                                                                
+        ,ope.INB_SHIPMENT_TYPE     
+      --  ,shipment.fn_api_timezone(ope.sit_site_id, ope.INB_UPDATED_DATETIME)  as  INB_UPDATED_DATETIME_TZ
+        ,ope.CHK_FBM_USER_ID                                                                           
+        ,ope.CHECKIN_ID                   
+     --   ,shipment.fn_api_timezone(ope.sit_site_id, ope.CHK_CREATED_DATETIME)  as  CHK_CREATED_DATETIME_TZ
+        ,ope.MES_CHECKIN                 
+      -- ,shipment.fn_api_timezone(ope.sit_site_id, ope.CHK_UPDATED_DATETIME)  as  CHK_UPDATED_DATETIME_TZ
+        ,ope.CHK_STATUS                 
+      --  ,shipment.fn_api_timezone(ope.sit_site_id, ope.CHKU_CREATED_DATETIME)  as  CHKU_CREATED_DATETIME_TZ
+       -- ,shipment.fn_api_timezone(ope.sit_site_id, ope.CHKU_UPDATED_DATETIME)  as  CHKU_UPDATED_DATETIME_TZ
+        ,ope.CHKU_UNITS_OK                                                                             
+        ,ope.CHKU_UNITS_DAMAGED                                                                        
+        ,ope.CHKU_UNITS_TOTAL                                                                          
+        ,ope.PUTAWAY_ID                     
+      --  ,shipment.fn_api_timezone(ope.sit_site_id, ope.PW_CREATED_DATETIME)  as  PW_CREATED_DATETIME_TZ
+      --  ,shipment.fn_api_timezone(ope.sit_site_id, ope.PW_UPDATED_DATETIME)  as  PW_UPDATED_DATETIME_TZ
+        ,ope.PW_FBM_USER_ID                                                                            
+        ,ope.PW_UNITS_OK                                                                               
+        ,ope.PW_UNITS_DAMAGED                                                                          
+        ,ope.PW_UNITS_TOTAL                                                                            
+        ,ope.PW_STATUS                                                                                 
+        ,ope.AUDIT_ID                   
+       -- ,shipment.fn_api_timezone(ope.sit_site_id, ope.AU_CREATED_DATETIME)  as  AU_CREATED_DATETIME_TZ
+       -- ,shipment.fn_api_timezone(ope.sit_site_id, ope.AU_UPDATED_DATETIME)  as  AU_UPDATED_DATETIME_TZ
+        ,ope.AU_FBM_USER_ID                                                                            
+        ,ope.AU_UNITS_OK                                                                               
+        ,ope.AU_UNITS_DAMAGED_ML                                                                       
+        ,ope.AU_UNITS_DAMAGED_SELLER                                                                   
+        ,ope.AU_UNITS_DAMAGED                                                                          
+        ,ope.AU_UNITS_TOTAL                                                                            
+        ,ope.AU_STATUS                                                                                 
+        ,ope.STORED_UNITS_BI                                                                           
+        ,ope.CHECKIN_PUTAWAY                                                                           
+        ,ope.DAMAGED_CULPABILITY                                                                       
+        ,ope.AUDIT_CULPABILITY                                                                         
+        ,ope.USUARIO_ERROR_PUTAWAY    
+      --  ,shipment.fn_api_timezone(ope.sit_site_id, ope.AUD_INS_DT)  as  AUD_INS_DT_TZ
+      --  ,shipment.fn_api_timezone(ope.sit_site_id, ope.AUD_UPD_DT)  as  AUD_UPD_DT_TZ
+       -- ,ope.AUD_FROM_INTERFACE      
+        --,agu.CHECKIN_CONTROL
+      --  ,PANEL_UNIT_CONTROL
+      --  ,STORAGE_DATE_TZ
+      --  ,stock.ite_item_id
+        --,stock.ite_height
+       -- ,stock.ite_length
+       -- ,stock.ite_width
+        -- ,stock.ite_weigth
+        -- ,au.audit_auto_flag 
+        ,coalesce(cat.vertical, 'OTROS') as vertical
+        -- ,case when cust.CUS_PARTY_TYPE_ID='1P' then 'First Party' when cust.CUS_PARTY_TYPE_ID='3P' then 'Third Party' when cust.CUS_PARTY_TYPE_ID='PL' then 'Private Label' else 'Otros' end AS CUS_INITIATIVE
+        -- ,ic.INSURANCE_COST
+
+FROM WHOWNER.bt_fbm_inbound_operation OPE 
+
+LEFT JOIN WHOWNER.bt_fbm_inbound_operation_agg AGU on agu.inbound_id=ope.inbound_id and agu.inventory_id=ope.inventory_id
+
+LEFT JOIN (
+    SELECT 
+        inventory_id, 
+        max (ite_item_id) ite_item_id, 
+        max(coalesce(b.ite_height,0)) ite_height, 
+        max(coalesce(b.ite_length,0)) ite_length, 
+        max(coalesce(b.ite_width,0)) ite_width, 
+        max(coalesce(b.ite_weigth,0)) ite_weigth
+
+        FROM WHOWNER.BT_FBM_STOCK_DIMENSIONS B
+
+        GROUP BY inventory_id) stock on agu.inventory_id=stock.inventory_id
+
+LEFT JOIN WHOWNER.BT_FBM_AUDIT_UNIT au on ope.audit_id = au.audit_id and agu.inventory_id=au.inventory_id
+LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA cust on cust.cus_cust_id=ope.CUS_CUST_ID 
+LEFT JOIN WHOWNER.LK_ITE_ITEMS_PH it on it.ite_item_id=stock.ite_item_id and it.SIT_SITE_ID=ope.SIT_SITE_ID  and it.photo_id='TODATE' 
+LEFT JOIN WHOWNER.AG_LK_CAT_CATEGORIES_ph cat on cat.sit_site_id=ope.SIT_SITE_ID and cat.cat_categ_id_l7=it.cat_categ_id and cat.photo_id='TODATE'
+LEFT JOIN whowner.BT_FBM_STOCK_INVENTORY_PH ic ON ope.inventory_id = ic.inventory_id
+
+        --WHERE cast(CHKU_CREATED_DATETIME_TZ as date) >= '2021-06-03'
+        --and cast(CHKU_CREATED_DATETIME_TZ as date) <= date-1
+        WHERE ope.CUS_NICKNAME <> 'PRUEBASJORGE'
+
+) WITH DATA;
