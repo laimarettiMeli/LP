@@ -1,0 +1,20 @@
+delete from Temp_45.Total_Shp
+where  CAST(last_updated as date)  BETWEEN (current_date -10) AND  current_date;
+
+INSERT INTO Temp_45.Total_Shp 
+select 
+shi.sit_site_id,
+shp.SHP_LG_FACILITY_ID, 
+comp.SHP_COMPANY_NAME,
+CAST(SHP_LG_ROUTE_END_DATE as date) AS LAST_UPDATED,
+count(shp.shp_shipment_id) Q_Shipment,
+count(distinct logs.SHP_LG_ROUTE_ID) Q_Routs,
+sum(shi.SHP_ORDER_COST_USD) SHP_ORDER_COST_USD
+from WHOWNER.BT_SHP_LG_SHIPMENTS_ROUTES logs 
+left join WHOWNER.BT_SHP_LG_SHIPMENTS shp ON logs.SHP_SHIPMENT_ID = shp.SHP_SHIPMENT_ID
+left join WHOWNER.BT_SHP_SHIPMENTS shi  on shp.SHP_SHIPMENT_ID = shi.SHP_SHIPMENT_ID 
+left JOIN WHOWNER.LK_SHP_COMPANIES comp ON comp.SHP_company_ID = logs.shp_company_ID
+WHERE logs.SHP_LG_ROUTE_STATUS = 'close'
+AND CAST(SHP_LG_ROUTE_END_DATE as date)  BETWEEN (current_date -10)  AND  current_date
+and logs.SHP_LG_SHIPMENT_SUB_STATUS is not null
+group by 1,2,3,4;
