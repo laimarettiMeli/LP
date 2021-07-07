@@ -1,0 +1,51 @@
+CREATE MULTISET VOLATILE TABLE Stale, NO LOG AS (
+select ch.SHP_SHIPMENT_ID , ch.SHP_LG_STATUS, ch.SHP_LG_SUB_STATUS , min(ch.shp_lg_last_updated) as shp_lg_last_updated
+from WHOWNER.bt_shp_lg_shipment_checkpoints ch
+WHERE ch.shp_lg_sub_status in ('stale')
+and ch.shp_lg_status in ('on_way','at_station')
+and CAST(ch.shp_lg_last_updated  as date) BETWEEN '2020-01-01' AND  (current_date -1)
+group by 1,2,3 )WITH DATA PRIMARY INDEX (SHP_SHIPMENT_ID) ON COMMIT PRESERVE ROWS;
+
+CREATE MULTISET VOLATILE TABLE Shipments_temp, NO LOG AS (
+select chk.SHP_SHIPMENT_ID as id,max(chk.SHP_LG_SHIPMENT_CHECKPOINT_ID) check_id
+from whowner.bt_shp_lg_shipment_checkpoints chk
+Where EXISTS (SELECT 1 FROM Stale stl WHERE stl.shp_shipment_id=chk.SHP_SHIPMENT_ID)
+group by 1
+)WITH DATA PRIMARY INDEX (id) ON COMMIT PRESERVE ROWS;
+
+
+DROP TABLE TEMP_45.LP_STALE;
+CREATE TABLE TEMP_45.LP_STALE AS
+(
+select 
+chk.SHP_SHIPMENT_ID,
+shi.SIT_SITE_ID,
+shi.SHP_DATE_SHIPPED_ID,
+chk.SHP_LG_FACILITY_ID,
+chk.SHP_LG_CLUSTER_ID ,
+chk.SHP_LG_STATUS,
+chk.SHP_LG_SUB_STATUS,
+shi.shp_logistic_center_id,
+(case when shi.SHP_PICKING_TYPE_ID in ('cross_docking','xd_drop_off') then 'XD'
+        when shi.SHP_PICKING_TYPE_ID in ('drop_off','drop_shipping') then 'DS'
+        when shi.SHP_PICKING_TYPE_ID = 'fulfillment' then 'FBM'
+        when shi.SHP_PICKING_TYPE_ID = 'self_service' then 'SELF_SERVICE'
+        else 'OTROS' end) as PICKING_TYPE ,
+(case when (chk.SHP_LG_SUB_STATUS in ('Stolen','awaiting_police_report','stolen_awaiting_documentation')) then 'Stolen'
+      when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('damaged','lost')) then 'Lost at Station'
+	  when (chk.SHP_LG_STATUS in ('on_way') and chk.SHP_LG_SUB_STATUS in ('damaged','lost'))  then 'Lost on Way'
+	  when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('stale'))  then 'Stale at Station'
+	  when (chk.SHP_LG_STATUS in ('on_way') and chk.SHP_LG_SUB_STATUS in ('stale'))  then 'Stale on Way'
+	    else 'Otros' end ) as Clasificacion,
+shi.shp_order_cost_usd ,
+stl.SHP_LG_STATUS as Status_Stale,
+stl.SHP_LG_SUB_STATUS as Sub_status_stale,
+CAST(stl.shp_lg_last_updated as date) as Stale_Date,
+CAST(chk.shp_lg_last_updated as date) as LAST_UPDATED
+from Shipments_temp lpship
+left join WHOWNER.bt_shp_lg_shipment_checkpoints chk  on lpship.id = chk.SHP_SHIPMENT_ID and lpship.check_id = chk.SHP_LG_SHIPMENT_CHECKPOINT_ID
+left join WHOWNER.BT_SHP_SHIPMENTS shi  on lpship.id = shi.SHP_SHIPMENT_ID 
+left join Stale stl on stl.shp_shipment_id=chk.SHP_SHIPMENT_ID
+)
+WITH DATA;
+GRANT SELECT ON TEMP_45.LP_STALE TO wibezerra,juarodrigues,truiz,laimaretti,mmartorana WITH GRANT OPTION;
