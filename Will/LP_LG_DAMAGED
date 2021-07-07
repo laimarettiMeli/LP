@@ -1,0 +1,54 @@
+CREATE multiset volatile table a as (
+select a.shp_shipment_id as shipment,
+a.shp_lg_facility_origin_id as origin,
+a.shp_lg_status as last_updated_status,
+a.shp_lg_sub_status as last_updated_sub_status,
+cast(a.shp_lg_last_updated as date) as last_updated_date
+from WHOWNER.BT_SHP_LG_SHIPMENTS a
+left join WHOWNER.LK_SHP_FACILITIES b on a.shp_lg_facility_id=b.shp_facility_id
+) with data primary index(shipment) on commit preserve rows;
+
+create multiset volatile table x as (
+select a.shp_shipment_id as shipment,
+cast(a.shp_lg_shipment_chk_dt as date) as fecha_on_way,
+b.shp_site_id
+from WHOWNER.BT_SHP_LG_SHIPMENT_CHECKPOINTS a
+left join WHOWNER.LK_SHP_FACILITIES b on a.shp_lg_facility_id=b.shp_facility_id
+where a.shp_lg_status='on_way'
+and a.shp_lg_sub_status is null
+and cast(a.shp_lg_shipment_chk_dt as date) between date '2020-06-01' and current_date-1
+) with data primary index(shipment) on commit preserve rows;
+
+create multiset volatile table c as (
+SELECT
+distinct shp_shipment_id,
+TD_SYSFNLIB.WEEKNUMBER_OF_YEAR(cast(SHP_LG_SHIPMENT_CHK_DT as date), 'ISO') as "semana",
+shp_lg_sub_status,
+shp_lg_facility_id,
+fac.shp_site_id 
+FROM WHOWNER.BT_SHP_LG_SHIPMENT_CHECKPOINTS as shp, WHOWNER.LK_SHP_FACILITIES as fac
+WHERE shp_lg_sub_status = 'damaged'
+and shp_lg_status = 'at_station'
+and shp_lg_shipment_chk_dt > cast('2020-06-01' as date)
+and shp.shp_lg_facility_id = fac.shp_facility_id
+) with data primary index(shp_shipment_id) on commit preserve rows;
+
+DROP TABLE TEMP_45.LP_LG_DAMAGED;
+CREATE TABLE TEMP_45.LP_LG_DAMAGED AS
+(
+select c.shp_shipment_id,
+c.semana,
+c.shp_lg_sub_status,
+c.shp_lg_facility_id,
+a.origin,
+x.fecha_on_way,
+c.shp_site_id,
+a.last_updated_status,
+a.last_updated_sub_status,
+a.last_updated_date
+from c
+left join a on c.shp_shipment_id=a.shipment
+left join x on c.shp_shipment_id=x.shipment
+)
+WITH DATA;
+GRANT SELECT ON TEMP_45.LP_LG_DAMAGED TO wibezerra,juarodrigues,truiz,laimaretti,mmartorana WITH GRANT OPTION;
