@@ -1,4 +1,4 @@
-DELETE FROM TEMP_45.LP_Route_Cancelled
+DELETE FROM TEMP_45.LP_Route_Cancelled;
 
 INSERT INTO TEMP_45.LP_Route_Cancelled
 select
@@ -36,4 +36,4 @@ Left join WHOWNER.BT_TMS_TRACKING tms ON (tms.shp_shipment_id = shp.shp_shipment
 
 where shp.shp_status_id  in ('shipped','ready_to_ship')
 and lg.SHP_LG_LAST_UPDATED > current_date -90 
-group by 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18
+group by 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18;
