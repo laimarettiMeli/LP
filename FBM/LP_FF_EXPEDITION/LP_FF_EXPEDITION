@@ -1,0 +1,62 @@
+Drop table TEMP_45.LP_FF_EXPEDITION;
+CREATE TABLE TEMP_45.LP_FF_EXPEDITION AS
+(
+select
+a.FBM_MOV_ID,
+a.FBM_TRX_ID,
+a.FBM_OPE_ID,
+a.WAREHOUSE_ID,
+a.FBM_USER_ID,
+b.cus_last_name||' '||b.cus_first_name as name,
+a.FBM_PROCESS_NAME,
+a.FBM_CREATED_DATE+ tz.diff_usa * interval '1' hour AS created_date,
+a.FBM_CREATED_DT,
+a.INVENTORY_ID,
+a.ADDRESS_ID_FROM,
+a.ADDRESS_ID_TO,
+a.FBM_QUANTITTY,
+c.ITE_ITEM_ID,
+c.ite_item_title,
+c.ite_dom_domain_id,
+c.ite_base_current_price,
+c.ite_site_current_price,
+d.SHP_SHIPMENT_ID,
+shp.shp_status_id,
+shp.shp_substatus_id,
+d.TMS_TR_DATE_CREATED,
+d.TMS_TR_LENGTH,
+d.TMS_TR_HEIGHT,
+d.TMS_TR_WIDHT,
+d.TMS_TR_WEIGHT,
+d.TMS_TR_PROCES_TYPE,
+d.TMS_TR_CLOSE_PACKING_DATE,
+d.SHP_METHOD_NAME,
+d.SHP_LABEL_CARRIER_NAME,
+d.SHP_LABEL_SERVICE_NAME,
+d.SHP_LABEL_ZONE_NAME,
+d.TMS_MKTPL_ORDER_ID,
+d.TMS_TRACKING_NUMBER_ID,
+d.TMS_SELLER_INFO_ID,
+d.TMS_SELLER_INFO_NAME,
+d.TMS_SELLLER_INFO_ZIP_CODE,
+d.TMS_BUYER_INFO_ID,
+d.TMS_BUYER_INFO_NAME,
+d.TMS_BUYER_INFO_ZIP_CODE,
+d.TMS_BUYER_INFO_ADDRESS_LINE
+from WHOWNER.BT_FBM_STOCK_MOVEMENT a
+left join LK_FBM_USERS b on  ( a.FBM_USER_ID=b.cus_cust_id and  a.warehouse_id= b.warehouse_id)
+left join BT_FBM_STOCK_INVENTORY_PH LK on (LK.inventory_id = a.inventory_id and lk.warehouse_id = a.warehouse_id )
+left join LK_ITE_ITEMS_PH c on (lk.inventory_id=c.ITE_INVENTORY_ID and c.sit_site_id=lk.sit_site_id)
+left join WHOWNER.BT_TMS_TRACKING d on a.shp_shipment_id = d.SHP_SHIPMENT_ID
+LEFT JOIN WHOWNER.BT_SHP_SHIPMENTS shp ON (shp.shp_shipment_id = d.shp_shipment_id)
+JOIN WHOWNER.LK_SHP_FACILITIES F
+      ON a.warehouse_id = f.shp_facility_id
+    JOIN WHOWNER.API_TIMEZONES tz
+      ON tz.sit_site_id = f.shp_site_id  AND tz.tz_date = a.fbm_created_date
+Where a.warehouse_id in ('MXNL01','MXCD01','MXCD02','BRSP02','BRSP01','BRSP03','BRBA01','COCU01','ARBA01','CLRM01','MXJC01','CLRM02','BRSC01')
+AND left(a.ADDRESS_ID_TO,2) in ('ER')
+and cast(a.FBM_CREATED_DT as date)> current_date -30
+and TIM_DAY = DATE-1
+and c.photo_id = 'TODATE'
+) WITH DATA;
+GRANT ALL PRIVILEGES ON TEMP_45.LP_FF_EXPEDITION to wibezerra,juarodrigues,truiz,laimaretti;
