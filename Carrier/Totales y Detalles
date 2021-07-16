@@ -208,3 +208,57 @@ UPDATE temp_45.LP_LastMile
 set substatus= OREPLACE (substatus, 'stolen0','stolen');
 
 SELECT * FROM temp_45.LP_LastMile
+
+----Clasificacion de fraude
+
+DROP TABLE TEMP_45.LP_LASTIMILE_V02;
+CREATE TABLE TEMP_45.LP_LASTMILE_V02 AS(
+SELECT 
+lm.*
+,sco.cus_nickname_buy
+,sco.cus_nickname_sel
+,sco.ORD_ORDER_ID
+,sco.shp_picking_type_id
+,sco.shp_date_delivered_id
+,sco.GMV_USD
+,sco.bpp_cashout
+,sco.DOM_DOMAIN_ID
+,sco.VERTICAL
+,sco.Causa_BPP
+,sco.bpp_first_created_dt
+,sco.culpability
+,sco.Tipo_fraude
+,ec.SHP_ORIGIN
+,CASE
+  WHEN UPPER(sco.Tipo_fraude) LIKE '%FRAUD_%' THEN 'FRAUD'
+  WHEN UPPER(sco.Tipo_fraude) LIKE '%CARRIER_PNR_C%' THEN 'FRAUD'
+  WHEN UPPER(sco.Tipo_fraude) LIKE '%CARRIER_EMPTY_BOX%'  THEN 'FRAUD'
+  WHEN UPPER(ec.SHP_ORIGIN) LIKE '%CX%' THEN 'CX'
+  WHEN UPPER(ec.SHP_ORIGIN) LIKE '%MELI%' THEN 'MELI'
+  WHEN UPPER(ec.SHP_ORIGIN) LIKE '%SHIPPING%' THEN 'SHIPPING'
+  WHEN UPPER(ec.SHP_ORIGIN) LIKE '%CARRIER%' THEN 'CARRIER'
+  ELSE 'PENDING ANALYSIS' 
+END Clasification
+,CASE
+  WHEN Clasification = 'FRAUD' THEN 'FRAUD'
+  ELSE UPPER(Substatus)
+END Substatus_Clasification
+,CASE
+  WHEN lm.source <> 'Totals' 
+   THEN row_number() OVER(PARTITION BY lm.shipment_id ORDER BY lm.shipment_id DESC) 
+   ELSE 1
+  END AS SHP_SHIPMENT_ORDER
+
+FROM TEMP_45.LP_LASTMILE as lm
+  LEFT JOIN SCORING.ORDERS_MAIN_ME sco on sco.shp_shipment_id=lm.shipment_id
+  LEFT JOIN (SELECT * FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk 
+            INNER JOIN
+             (SELECT shp_id shp_1,MAX(SHP_CHECKPOINT_DATE) ld 
+               FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS 
+               WHERE SHP_SUB_STATUS in ('damaged','delayed','claimed_me','stolen','lost')  GROUP BY 1) as chk_1
+             ON chk.shp_id=chk_1.shp_1 and chk.SHP_CHECKPOINT_DATE = chk_1.ld) ec
+        
+          ON lm.shipment_id=ec.shp_id
+)WITH DATA;
+
+SELECT * FROM TEMP_45.LP_LASTMILE_V02
