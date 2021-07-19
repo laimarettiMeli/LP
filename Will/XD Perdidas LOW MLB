@@ -1,0 +1,20 @@
+select 
+lp.SHP_SHIPMENT_ID,
+lp.SIT_SITE_ID,
+lp.SHP_DATE_SHIPPED_ID,
+lp.SHP_LG_FACILITY_ID,
+lp.SHP_LOGISTIC_CENTER_ID,
+lp.PICKING_TYPE,
+lp.Clasificacion,
+lp.LAST_UPDATED,
+lp.SHP_COMPANY_NAME,
+lp.SHP_ORDER_COST_USD,
+tms.tms_tr_logistic_center_id as "XD HUB Origen",
+tms.TMS_TR_PACKINGLIST_NUMBER as "HU"
+
+FROM temp_45.Logistics_LP lp
+LEFT JOIN WHOWNER.BT_TMS_TRACKING tms ON (tms.shp_shipment_id = lp.shp_shipment_id)
+Where lp.LAST_UPDATED >= '2021-01-01' 
+AND lp.Clasificacion = 'Lost on Way'
+AND lp.SIT_SITE_ID = 'MLB'
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12
