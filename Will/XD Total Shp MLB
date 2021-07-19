@@ -1,0 +1,14 @@
+select
+shi.sit_site_id,
+SHP_LOGISTIC_CENTER_ID,
+CAST(SHP_DATE_SHIPPED_ID as date) AS SHP_DATE_SHIPPED_ID,
+count(shp.shp_shipment_id) Q_Shipment,
+sum(shi.SHP_ORDER_COST_USD) SHP_ORDER_COST_USD
+
+From WHOWNER.BT_SHP_LG_SHIPMENTS shp 
+left join WHOWNER.BT_SHP_SHIPMENTS shi  on shp.SHP_SHIPMENT_ID = shi.SHP_SHIPMENT_ID 
+AND CAST(SHP_DATE_SHIPPED_ID as date) >= '2021-01-01'
+
+WHERE shi.sit_site_id = 'MLB'
+
+group by 1,2,3
