@@ -1,0 +1,12 @@
+select 
+shp_shipment_id,
+shp_lg_last_updated,
+shp_lg_status,
+shp_lg_sub_status,
+shp_lg_route_id,
+shp_lg_facility_id 
+from WHOWNER.BT_SHP_LG_SHIPMENT_CHECKPOINTS 
+where
+shp_shipment_id IN ('40670426526')
+
+Order BY 2
