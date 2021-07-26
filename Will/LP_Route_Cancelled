@@ -3,7 +3,6 @@ DELETE FROM TEMP_45.LP_Route_Cancelled;
 INSERT INTO TEMP_45.LP_Route_Cancelled
 select
 shp.shp_shipment_id,
-shp.shp_date_created_id,
 shp.sit_site_id,
 shp.shp_status_id,
 shp.shp_substatus_id,
@@ -17,8 +16,9 @@ lr.SHP_LG_VEHICLE_PLATE_ID,
 lr.SHP_LG_VEHICLE_TYPE,
 lr.SHP_LG_DRIVER_ID,
 shp.SHP_ORDER_COST_USD,
-can.bpp_can_status,
 upper (dri.SHP_LG_DRIVER_FIRST_NAME) ||' '|| upper(dri.SHP_LG_DRIVER_LAST_NAME) AS DRIVER_NAME,
+cast (BPP_CAN_DATE_CREATED as date) as BPP_Created,
+cast (shp.shp_date_created_id as date) as Shp_Created,
 cast (lg.SHP_LG_LAST_UPDATED as date) as Last_Updated,
 case when BPP_CASHOUT_USD > 0 then '1'else '0' end as TAG_BPP_CASHOUT,
 sum(case when shp.SHP_FREE_FLAG_ID=0 then shp.shp_real_cost_usd + shp.SHP_ORDER_COST_USD else shp.SHP_ORDER_COST_USD end) as GMV_AND_FSB_USD,
@@ -34,6 +34,8 @@ left join WHOWNER.LK_SHP_COMPANIES comp ON comp.SHP_company_ID = lr.shp_company_
 left join WHOWNER.LK_SHP_LG_DRIVERS dri ON dri.SHP_LG_DRIVER_ID = lr.SHP_LG_DRIVER_ID
 Left join WHOWNER.BT_TMS_TRACKING tms ON (tms.shp_shipment_id = shp.shp_shipment_id)
 
-where shp.shp_status_id  in ('shipped','ready_to_ship')
-and lg.SHP_LG_LAST_UPDATED > current_date -90 
+where can.bpp_can_status = 'COMPLETED'
+and shp.shp_status_id  in ('shipped','ready_to_ship')
+and lg.shp_lg_sub_status = 'route_cancelled'
+and Last_Updated >= '2021-01-01'
 group by 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18;
