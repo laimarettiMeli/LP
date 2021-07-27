@@ -27,6 +27,7 @@ sum(case when shp.SHP_FREE_FLAG_ID=0 then shp.shp_real_cost_usd + shp.SHP_ORDER_
 from WHOWNER.BT_BPP_CANCELS can 
 
 left join WHOWNER.BT_SHP_SHIPMENTS shp on shp.shp_shipment_id = can.shp_shipment_id
+left join BT_CM_BUYER_PROTEC_PROGRAM b on can.shp_shipment_id = b.shp_shipment_id
 left join WHOWNER.BT_SHP_LG_SHIPMENTS LG on lg.shp_shipment_id = shp.shp_shipment_id
 left join WHOWNER.BT_SHP_LG_SHIPMENTS_ROUTES lr on lr.SHP_SHIPMENT_ID = shp.shp_shipment_id
 left join WHOWNER.LK_SHP_COMPANIES comp ON comp.SHP_company_ID = lr.shp_company_ID
