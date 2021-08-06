@@ -1,0 +1,41 @@
+SELECT
+  sit_site_id as País,
+  shp_lg_facility_id as SVC,
+  CAST(SHP_LG_ROUTE_END_DATE AS DATE) as Final_Route,
+  shp_lg_route_id as ROTA,
+  comp.shp_company_name AS MLP,
+  shp_lg_vehicle_type as Tipo_veículo,
+  SHP_LG_VEHICLE_PLATE_ID as Plate,
+  logs.shp_lg_driver_id,
+  UPPER(dri.SHP_LG_DRIVER_FIRST_NAME) ||' '|| UPPER(dri.SHP_LG_DRIVER_LAST_NAME) AS DRIVER_NAME,
+  shp_lg_route_init_date,
+  SHP_LG_route_end_date,
+ COUNT(logs.SHP_SHIPMENT_ID) AS SPR,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'delivered' THEN logs.SHP_SHIPMENT_ID END) AS Delivered,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'stolen' THEN logs.SHP_SHIPMENT_ID END) AS Stolen,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'unvisited_address' THEN logs.SHP_SHIPMENT_ID END) AS Unvisited,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'missing' THEN logs.SHP_SHIPMENT_ID END) AS Missing,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'missrouted' THEN logs.SHP_SHIPMENT_ID END) AS Missrouted,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'soon_deliver' THEN logs.SHP_SHIPMENT_ID END) AS Soon_delivery,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'attempted_robbery' THEN logs.SHP_SHIPMENT_ID END) AS Attempted_robbery,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'buyer_rejected' THEN logs.SHP_SHIPMENT_ID END) AS Buyer_rejected,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'awaiting_police_report' THEN logs.SHP_SHIPMENT_ID END) AS Awaiting_police_report,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'stolen_awaiting_documentation' THEN logs.SHP_SHIPMENT_ID END) AS Stolen_awaiting_documentation,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'route_cancelled' THEN logs.SHP_SHIPMENT_ID END) AS Stolen_awaiting_documentation,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'undeliverable' THEN logs.SHP_SHIPMENT_ID END) AS Undeliverable,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'delivered_place' THEN logs.SHP_SHIPMENT_ID END) AS Delivered_place,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'bad_address' THEN logs.SHP_SHIPMENT_ID END) AS Bad_address,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'lost' THEN logs.SHP_SHIPMENT_ID END) AS Lost,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'missorted' THEN logs.SHP_SHIPMENT_ID END) AS Missorted,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'damaged' THEN logs.SHP_SHIPMENT_ID END) AS Damaged,
+ COUNT(CASE WHEN SHP_LG_SHIPMENT_SUB_STATUS = 'buyer_absent' THEN logs.SHP_SHIPMENT_ID END) AS Buyer_absent
+
+FROM BT_SHP_LG_SHIPMENTS_ROUTES logs
+INNER JOIN WHOWNER.LK_SHP_COMPANIES comp ON comp.SHP_company_ID = logs.shp_company_ID
+INNER JOIN LK_SHP_LG_DRIVERS dri ON dri.shp_lg_driver_id = logs.shp_lg_driver_id 
+
+WHERE shp_lg_route_status = 'close'
+AND sit_site_id = 'MLB'
+AND logs.shp_lg_driver_id  IN ('99352')
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11
+ORDER BY 3
