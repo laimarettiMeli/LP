@@ -1,0 +1,28 @@
+select 
+sc.cx_aud_datetime,
+sc.cx_user_ldap,
+sc.current_status,
+sc.current_substatus,
+sc.previous_status,
+sc.previous_substatus,
+sc.shp_shipment_id AS Shipment,
+shp.SHP_ORDER_COST_USD,
+lg.SHP_LG_LAST_UPDATED,
+lg.SHP_LG_FACILITY_ID,
+lg.shp_lg_status,
+lg.shp_lg_sub_status,
+tms.SIT_SITE_ID,
+tms.TMS_TR_LOGISTIC_CENTER_ID
+
+from SCORING.audit_sbo sc
+
+left join WHOWNER.BT_SHP_LG_SHIPMENTS LG on lg.shp_shipment_id = sc.shp_shipment_id
+Left join WHOWNER.BT_TMS_TRACKING tms ON tms.shp_shipment_id = sc.shp_shipment_id
+left join WHOWNER.BT_SHP_SHIPMENTS shp ON shp.shp_shipment_id = sc.shp_shipment_id
+
+WHERE cx_aud_datetime >='2021-05-01'
+
+AND previous_status IS NOT NULL
+AND SHP_LG_SUB_STATUS IS NOT NULL
+
+Group By 1,2,3,4,5,6,7,8,9,10,11,12,13,14
