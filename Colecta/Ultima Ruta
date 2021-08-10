@@ -1,5 +1,4 @@
 --Esta query trae la ultima ruta de cada shp
-
 SELECT 
   shp.sit_site_id,
   shp.SHP_SHIPMENT_ID
@@ -11,8 +10,8 @@ FROM WHOWNER.BT_SHP_SHIPMENTS shp
   SELECT rutas.* 
   FROM (
           SELECT shp.SHP_SHIPMENT_ID as shp_id,r.*,otu.shp_lg_transport_unit_status
-              FROM BT_SHP_SHIPMENTS shp
-                LEFT JOIN Temp_45.temp_shp_FM tu ON TU.shp_lg_tr_related_entity_id=shp.SHP_SHIPMENT_ID
+              FROM WHOWNER.BT_SHP_SHIPMENTS shp
+                LEFT JOIN WHOWNER.lk_shp_lg_transport_unit tu ON TU.shp_lg_tr_related_entity_id=shp.SHP_SHIPMENT_ID
                 LEFT JOIN WHOWNER.LK_SHP_LG_ORDER_TU AS otu ON otu.SHP_LG_TRANSPORT_UNIT_ID=tu.shp_lg_transport_unit_id
                 LEFT JOIN WHOWNER.BT_SHP_LG_ORDER AS o ON o.shp_lg_order_id= otu.shp_lg_order_id
                 LEFT JOIN WHOWNER.LK_SHP_LG_ROUTE_STOP as rstop ON rstop.shp_lg_stop_id=o.shp_lg_ROUTE_stop_id
@@ -23,7 +22,7 @@ FROM WHOWNER.BT_SHP_SHIPMENTS shp
   
   (SELECT shp.SHP_SHIPMENT_ID as shp_id,MAX(SHP_LG_LAST_UPDATED) AS Last_date
       FROM BT_SHP_SHIPMENTS shp
-        LEFT JOIN Temp_45.temp_shp_FM tu ON TU.shp_lg_tr_related_entity_id=shp.SHP_SHIPMENT_ID
+        LEFT JOIN WHOWNER.lk_shp_lg_transport_unit tu ON TU.shp_lg_tr_related_entity_id=shp.SHP_SHIPMENT_ID
         LEFT JOIN WHOWNER.LK_SHP_LG_ORDER_TU AS otu ON otu.SHP_LG_TRANSPORT_UNIT_ID=tu.shp_lg_transport_unit_id
         LEFT JOIN WHOWNER.BT_SHP_LG_ORDER AS o ON o.shp_lg_order_id= otu.shp_lg_order_id
         LEFT JOIN WHOWNER.LK_SHP_LG_ROUTE_STOP as rstop ON rstop.shp_lg_stop_id=o.shp_lg_ROUTE_stop_id
@@ -34,5 +33,6 @@ FROM WHOWNER.BT_SHP_SHIPMENTS shp
     
     ) r on r.shp_id=shp.shp_shipment_id   
 -----------------------------------------------FIN CHINO RUTAS        
-WHERE-- shp.shp_shipment_ID=40390849031
+WHERE 
+shp.shp_shipment_ID=40390849031 AND
 shp.sit_site_id = 'MLA'
