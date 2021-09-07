@@ -229,6 +229,12 @@ set c_carrier = OREPLACE (c_carrier, 'MERCADOENVIOS', 'MERCADO ENVIOS');
 UPDATE TEMP_45.LP_LASTMILE_V06_FRAUD
 set substatus= OREPLACE (substatus, 'stolen0','stolen');
 
+UPDATE TEMP_45.LP_LASTMILE_V06_FRAUD
+set c_carrier = OREPLACE (c_carrier, 'MELI LOGISTICS', 'MERCADO ENVIOS');
+UPDATE TEMP_45.LP_LASTMILE_V06_FRAUD
+set c_carrier = OREPLACE (c_carrier, 'LOGISTICS', 'MERCADO ENVIOS');
+
+
 
 
 
