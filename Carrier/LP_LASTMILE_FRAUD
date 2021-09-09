@@ -1,8 +1,8 @@
- DROP TABLE TEMP_45.LP_LASTMILE_V06_FRAUD;
- CREATE TABLE TEMP_45.LP_LASTMILE_V06_FRAUD as (
-  -- DELETE FROM TEMP_45.LP_LASTMILE_V05_FRAUD WHERE date_shipped BETWEEN (current_date -100) AND  (current_date -1);
+ -- DROP TABLE TEMP_45.LP_LASTMILE_V06_FRAUD;
+-- CREATE TABLE TEMP_45.LP_LASTMILE_V06_FRAUD as (
+  DELETE FROM TEMP_45.LP_LASTMILE_V06_FRAUD WHERE date_shipped BETWEEN (current_date -150) AND  (current_date -1);
   
- -- INSERT INTO TEMP_45.LP_LASTMILE_V05_FRAUD
+   INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
   SELECT
               row_number() OVER(PARTITION BY shipment_id,ORD_ORDER_ID ORDER BY (BPP_CASHOUT_USD) DESC) as Fcy
              ,Pais
@@ -101,8 +101,8 @@
                 -- LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
             
             WHERE 
-            --shp.shp_date_shipped_id BETWEEN (current_date -100) AND  (current_date -1)
-             shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
+              shp.shp_date_shipped_id BETWEEN (current_date -150) AND  (current_date -1)
+             -- shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
             AND shp.SHP_SOURCE_ID = 'MELI'
             AND shp.shp_shipping_mode_id = 'me2'
             AND shp.shp_type = 'forward'
@@ -111,12 +111,16 @@
             and shp.shp_picking_type_id is not null
             -- and ((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) > 0
             and sco.bpp_cashout > 0 
+            and BPP_BUDGET not in ('returns')
+
             -- and substatus <> 'NO'
             -- AND shp.shp_shipment_id=40589245931
             -- AND sco.ord_order_id=4594876194
+            -- and row_number() OVER(PARTITION BY shipment_id,sco.ORD_ORDER_ID ORDER BY (BPP_CASHOUT_USD) DESC) = 1
             
             GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41)a
- )WITH DATA;
+;-- )WITH DATA;
+
 
 -- TOTALES
 INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
@@ -199,8 +203,8 @@ INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
                 	LEFT JOIN WHOWNER.LK_SHP_ADDRESS shp_a on shp.shp_receiver_address=shp_a.shp_add_id
                 	-- LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
                 WHERE
-                --shp.shp_date_shipped_id BETWEEN current_date -100 and current_date -1
-                 shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
+                shp.shp_date_shipped_id BETWEEN current_date -150 and current_date -1
+                -- shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
 				        AND shp.SHP_SOURCE_ID = 'MELI'
                 AND shp.shp_shipping_mode_id = 'me2'
                 AND shp.shp_type = 'forward'
@@ -216,25 +220,20 @@ OR c_carrier in ('N/A')
 OR (Pais='MLA' AND c_carrier='CORREIOS')
 OR (Pais='MLB' AND c_carrier='OCASA')
 OR (Pais='MLM' AND c_carrier='OCA')
-OR (Pais='MLM' AND c_carrier='OCASA');
+OR (Pais='MLM' AND c_carrier='OCASA')
+OR (Fcy>1);
 
 -- Actualizo la tabla para reemplazar valores de algunas columnas
 
 UPDATE TEMP_45.LP_LASTMILE_V06_FRAUD
 set c_carrier = OREPLACE (c_carrier, 'MOTONORTE', 'WEBPACK');
 UPDATE TEMP_45.LP_LASTMILE_V06_FRAUD
-set c_carrier = OREPLACE (c_carrier, 'REPROCESOS CARRITO', 'LOGISTICS');
+set c_carrier = OREPLACE (c_carrier, 'REPROCESOS CARRITO', 'MERCADO ENVIOS');
 UPDATE TEMP_45.LP_LASTMILE_V06_FRAUD
 set c_carrier = OREPLACE (c_carrier, 'MERCADOENVIOS', 'MERCADO ENVIOS');
 UPDATE TEMP_45.LP_LASTMILE_V06_FRAUD
 set substatus= OREPLACE (substatus, 'stolen0','stolen');
-
 UPDATE TEMP_45.LP_LASTMILE_V06_FRAUD
 set c_carrier = OREPLACE (c_carrier, 'MELI LOGISTICS', 'MERCADO ENVIOS');
 UPDATE TEMP_45.LP_LASTMILE_V06_FRAUD
-set c_carrier = OREPLACE (c_carrier, 'LOGISTICS', 'MERCADO ENVIOS');
-
-
-
-
-
+set c_carrier = OREPLACE (c_carrier, 'LOGISTICS', 'MERCADO ENVIOS')
