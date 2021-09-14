@@ -1,0 +1,267 @@
+-- DROP TABLE TEMP_45.LP_Summary;
+DELETE FROM TEMP_45.LP_Summary;
+-- CREATE TABLE TEMP_45.LP_Summary as(
+--INSERT INTO TEMP_45.LP_Summary
+---------------------------------------------------------------------------------------- DETAILS
+      --- FIRST MILE
+      SELECT
+        SIT_SITE_ID
+        ,SHP_INB_CARRIER_NAME	Carrier
+        ,SHP_SUBSTATUS_ID	Substatus
+        ,date_picked_up "Date"
+        ,SUM(SHP_QUANTITY*ODR_ITEM_DOL_UNIT_PRICE) "Value"
+        ,COUNT(DISTINCT shp_shipment_id) "Qty"
+        ,NULL "FRAUD?"
+        ,CASE
+          WHEN Substatus='picked_up' THEN 'Pending'
+          WHEN Substatus='delayed' THEN 'Pending'
+          ELSE 'Lost'
+         END "Lost/Pending"
+        ,NULL "BPP?"
+        ,substatus Substatus_2
+        ,'Correo' culpability_2
+        ,' ' BPP_BUDGET
+        ,'FM' "Tablero"
+        ,'Details' as Source
+       FROM temp_45.LP_Colecta
+       WHERE source <>'Totals'
+       GROUP BY 1,2,3,4,7,8,9,10,11,12,13
+       
+      --- XD
+       UNION
+      SELECT
+        SIT_SITE_ID
+        ,SHP_CARRIER_ID_AJUS Carrier
+        ,SHP_SUBSTATUS_ID	Substatus
+        ,CAST(DATE_IN_HUB as DATE) "Date"
+        ,SUM(ITEM_PRICE*ITEMS_QTY) "Value"
+        ,COUNT(DISTINCT SHP_SHIPMENT_ID) "Qty"
+        ,NULL "FRAUD?"
+        ,CASE
+          WHEN Substatus='N/A' THEN 'Pending'
+          WHEN Substatus='in_hub' THEN 'Pending'
+          WHEN Substatus='in_packing_list' THEN 'Pending'
+          WHEN Substatus='authorized_by_carrier' THEN 'Pending'
+          ELSE 'Lost'
+         END "Lost/Pending"
+        ,NULL "BPP?"
+        ,substatus Substatus_2
+        ,'Correo' culpability_2
+        ,' ' BPP_BUDGET
+        ,'XD' "Tablero"
+        ,'Details' as Source
+       FROM temp_45.LP_XD
+       WHERE source <>'Totals'
+       GROUP BY 1,2,3,4,7,8,9,10,11,12,13
+      --- LASTMILE
+       UNION
+ --     CREATE TABLE TEMP_45.LP_Summary as(
+      SELECT
+        Pais SIT_SITE_ID
+        ,c_carrier Carrier
+        ,substatus Substatus
+        ,CAST(date_shipped as DATE) "Date"
+        ,SUM(BPP_CASHOUT_USD) "Value"
+        ,COUNT(DISTINCT shipment_Id) "Qty"
+        ,CASE
+          WHEN Tipo_fraude LIKE 'fraud_' THEN 1
+          WHEN Tipo_fraude LIKE 'carrier_empty_box' THEN 1
+          WHEN Tipo_fraude LIKE 'carrier_pnr_c' THEN 1
+          ELSE 0
+          END "FRAUD?"
+        ,'Lost' as "Lost/Pending"
+        ,NULL "BPP?"
+        ,CASE
+          WHEN "FRAUD?" = 0 AND Source = 'Details_2' AND Substatus='stolen' THEN 'CLAIMED'
+          WHEN "FRAUD?" = 0 AND Source = 'Details_2' AND Substatus='delayed' THEN 'DELAYED'
+          WHEN "FRAUD?" = 0 AND Source = 'Details_2' AND Substatus='NO' THEN 'CLAIMED'
+          WHEN "FRAUD?" = 0 AND Source = 'Details_2' AND Substatus='Caja Vacia' THEN 'CLAIMED'
+          WHEN "FRAUD?" = 1 AND Source = 'Details_2' THEN 'FRAUD'
+          WHEN Source = 'Details_1' THEN  UPPER(Substatus)
+          ELSE 'VER'
+         END Substatus_2
+        ,CASE
+          WHEN Substatus_2 ='FRAUD' OR Substatus_2='CLAIMED' THEN culpability ELSE 'Correo'
+         END "culpability_2"
+        ,BPP_BUDGET
+        ,'LM' "Tablero"
+        ,'Details' as Source
+          
+       FROM TEMP_45.LP_LASTMILE_V06_FRAUD
+       WHERE source <>'Totals'-- and BPP_BUDGET not in ('returns')
+       GROUP BY 1,2,3,4,7,8,9,10,11,12,13,14
+--      )with data;
+      --- PLACES
+       UNION
+       SELECT
+        SIT_SITE_ID
+        ,SHP_COMPANY_NAME Carrier
+        ,SHP_SUBSTATUS_ID	Substatus
+        ,CAST(fecha_dropoff as DATE) "Date"
+        ,SUM(Order_Cost_USD) "Value"
+        ,COUNT(DISTINCT SHP_SHIPMENT_ID) "Qty"
+        ,NULL "FRAUD?"
+        ,CASE
+          WHEN Substatus='delayed' THEN 'Pending'
+          WHEN Substatus='dropped_off' THEN 'Pending'
+          WHEN Substatus='cancelled' THEN 'Pending'
+          WHEN Substatus='authorized_by_carrier' THEN 'Pending'
+          ELSE 'Lost'
+         END "Lost/Pending"
+        ,CASE WHEN BPP_CASHOUT_USD>1 OR BPP_CASHOUT_USD is null THEN 1 ELSE 0 END as "BPP?"
+        ,substatus Substatus_2
+        ,'Correo' culpability_2
+        ,' ' BPP_BUDGET
+        ,'Places' "Tablero"
+        ,'Details' as Source
+         
+       FROM temp_45.LP_Places
+       WHERE source <>'Totals'
+       GROUP BY 1,2,3,4,7,8,9,10,11,12,13,14
+
+---------------------------------------------------------------------------------------- TOTALS
+      --- FIRST MILE
+      UNION
+      SELECT
+        SIT_SITE_ID
+        ,SHP_INB_CARRIER_NAME	Carrier
+        ,SHP_SUBSTATUS_ID	Substatus
+        ,shp_datetime_created_id "Date"
+        ,SUM(SHP_ORDER_COST_USD) "Value"
+        ,SUM(SHP_QUANTITY) "Qty"
+        ,NULL "FRAUD?"
+        ,'NULL' "Lost/Pending"
+        ,NULL "BPP?"
+        ,'NULL' Substatus_2
+        ,'NULL' culpability_2
+        ,' ' BPP_BUDGET
+        ,'FM' "Tablero"
+        ,'Totals' as Source
+       FROM temp_45.LP_Colecta
+       WHERE source ='Totals'
+       GROUP BY 1,2,3,4,7,8,9,10,11,12,13
+       
+      --- XD
+       UNION
+      SELECT
+        SIT_SITE_ID
+        ,SHP_CARRIER_ID_AJUS Carrier
+        ,SHP_SUBSTATUS_ID	Substatus
+        ,CAST(DATE_IN_HUB as DATE) "Date"
+        ,SUM(GMV) "Value"
+        ,SUM(QTY) "Qty"
+        ,NULL "FRAUD?"
+        ,'NULL' "Lost/Pending"
+        ,NULL "BPP?"
+        ,'NULL' Substatus_2
+        ,'NULL' culpability_2
+        ,' ' BPP_BUDGET
+        ,'XD' "Tablero"
+        ,'Totals' as Source
+       FROM temp_45.LP_XD
+       WHERE source = 'Totals'
+       GROUP BY 1,2,3,4,7,8,9,10,11,12,13
+      --- LASTMILE
+       UNION
+      SELECT
+        Pais SIT_SITE_ID
+        ,c_carrier Carrier
+        ,substatus Substatus
+        ,CAST(date_shipped as DATE) "Date"
+        ,SUM(TotalGMV) "Value"
+        ,SUM(Total_Shipments) "Qty"
+        ,NULL "FRAUD?"
+        ,'NULL' "Lost/Pending"
+        ,NULL "BPP?"
+        ,'NULL' Substatus_2
+        ,'NULL' "culpability_2"
+        ,' ' BPP_BUDGET
+        ,'LM' "Tablero"
+        ,'Totals' as Source
+          
+        
+       FROM TEMP_45.LP_LASTMILE_V06_FRAUD
+       WHERE source ='Totals'
+       GROUP BY 1,2,3,4,7,8,9,10,11,12,13,14
+      
+      --- PLACES
+       UNION
+       SELECT
+        SIT_SITE_ID
+        ,SHP_COMPANY_NAME Carrier
+        ,SHP_SUBSTATUS_ID	Substatus
+        ,CAST(fecha_dropoff as DATE) "Date"
+        ,SUM(Order_Cost_USD) "Value"
+        ,SUM(QTY) "Qty"
+        ,NULL "FRAUD?"
+        ,'NULL' "Lost/Pending"
+        ,NULL as "BPP?"
+        ,'NULL' Substatus_2
+        ,'NULL' culpability_2
+        ,' ' BPP_BUDGET
+        ,'Places' "Tablero"
+        ,'Totals' as Source
+         
+       FROM temp_45.LP_Places
+       WHERE source ='Totals'
+       GROUP BY 1,2,3,4,7,8,9,10,11,12,13,14
+
+ ) WITH DATA;
+
+--- TEST
+/*
+SELECT Tablero,YEAR("Date") as YY,MONTH("Date") as MM,Source, SUM("VALUE"),SUM("QTY")
+FROM TEMP_45.LP_Summary
+WHERE YY=2021 AND MM IN (5,6,7,8)
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4 
+*/
+SELECT Tablero,BPP_BUDGET,YEAR("Date") as YY,MONTH("Date") as MM,Source, SUM("VALUE"),SUM("QTY")
+FROM TEMP_45.LP_Summary WHERE Tablero='LM'
+GROUP BY 1,2,3,4,5
+--------------------------  TEST FM
+
+ SELECT
+        YEAR(date_picked_up) YY,MONTH(date_picked_up) MM,SUM(SHP_QUANTITY*ODR_ITEM_DOL_UNIT_PRICE) "Value",COUNT(DISTINCT shp_shipment_id) "Qty",'FM' "Tablero",'Details' as Source FROM temp_45.LP_Colecta
+       WHERE source <>'Totals' AND YY=2021 AND MM IN (5,6,7,8) 
+       GROUP BY 1,2
+ 
+ UNION
+ 
+ SELECT
+        YEAR(shp_datetime_created_id) YY,MONTH(shp_datetime_created_id) MM,SUM(SHP_QUANTITY*ODR_ITEM_DOL_UNIT_PRICE) "Value",SUM(SHP_QUANTITY) "Qty"  ,'FM' "Tablero",'Totals' as Source FROM temp_45.LP_Colecta
+       WHERE source ='Totals' AND YY=2021 AND MM IN (5,6,7,8) 
+       GROUP BY 1,2
+--------------------------  TEST XD
+UNION
+ SELECT
+        YEAR(DATE_IN_HUB) YY,MONTH(DATE_IN_HUB) MM,SUM(ITEM_PRICE*ITEMS_QTY) "Value",COUNT(DISTINCT SHP_SHIPMENT_ID) "Qty",'FM' "Tablero",'Details' as Source FROM temp_45.LP_XD
+       WHERE source <>'Totals' AND YY=2021 AND MM IN (5,6,7,8) 
+       GROUP BY 1,2
+ 
+ UNION
+ 
+ SELECT
+        YEAR(DATE_IN_HUB) YY,MONTH(DATE_IN_HUB) MM,SUM(GMV) "Value",SUM(QTY) "Qty"  ,'FM' "Tablero",'Totals' as Source FROM temp_45.LP_XD
+       WHERE source ='Totals' AND YY=2021 AND MM IN (5,6,7,8) 
+       GROUP BY 1,2;
+--------------------------  TEST PLACES
+UNION
+ SELECT
+        YEAR(fecha_dropoff) YY,MONTH(fecha_dropoff) MM,SUM(Order_Cost_USD) "Value",COUNT(DISTINCT SHP_SHIPMENT_ID) "Qty",'PL' "Tablero",'Details' as Source FROM temp_45.LP_Places
+       WHERE source <>'Totals' AND YY=2021 AND MM IN (5,6,7,8) 
+       GROUP BY 1,2
+ 
+ UNION
+ 
+ SELECT
+        YEAR(fecha_dropoff) YY,MONTH(fecha_dropoff) MM,SUM(GMV) "Value",SUM(QTY) "Qty"  ,'FM' "Tablero",'Totals' as Source FROM temp_45.LP_XD
+       WHERE source ='Totals' AND YY=2021 AND MM IN (5,6,7,8) 
+       GROUP BY 1,2;
+       
+--------------------------  TEST LM       
+SELECT      
+      YEAR(date_shipped) YY,MONTH(date_shipped) MM,BPP_BUDGET,SUM(BPP_CASHOUT_USD) "Value",COUNT(DISTINCT shipment_Id) "Qty"  ,'LM' "Tablero",'Details' as Source FROM TEMP_45.LP_LASTMILE_V06_FRAUD
+       WHERE  BPP_BUDGET <> 'returns' AND 
+       source <>'Totals' AND YY=2021 AND MM IN (5,6,7,8)
+         GROUP BY 1,2,3;
