@@ -1,0 +1,34 @@
+DELETE FROM TEMP_45.LP_Status_Changed;
+
+INSERT INTO TEMP_45.LP_Status_Changed
+select 
+tms.SIT_SITE_ID as PAÍS,
+tms.TMS_TR_LOGISTIC_CENTER_ID as XD_ORIGEN_HUB,
+lg.SHP_LG_FACILITY_ID as SVC,
+shp.SHP_ORDER_COST_USD as SHP_ORDER_COST_USD,
+shp.shp_shipment_id as SHP_SHIPMENT_ID,
+CAST(lg.SHP_LG_LAST_UPDATED as date) as LAST_UPDATED_LG,
+CAST(OREPLACE(SUBSTRING(sc.cx_aud_datetime FROM 1 FOR 10), '/', '-') as date) as LAST_UPDATED_CX,
+lg.shp_lg_status as SHP_LG_STATUS,
+lg.shp_lg_sub_status as SHP_LG_SUB_STATUS,
+sc.current_status as CURRENT_STATUS,
+sc.current_substatus as CURRENT_SUBSTATUS,
+sc.cx_user_ldap as CX_USER_LDAP
+
+from SCORING.audit_sbo sc
+
+left join WHOWNER.BT_SHP_LG_SHIPMENTS LG on lg.shp_shipment_id = sc.shp_shipment_id
+left join WHOWNER.BT_TMS_TRACKING tms on tms.shp_shipment_id = sc.shp_shipment_id
+left join WHOWNER.BT_SHP_SHIPMENTS shp on shp.shp_shipment_id = sc.shp_shipment_id
+
+where LAST_UPDATED_CX >='2021-01-01'
+
+and previous_status is not NULL
+and SHP_LG_SUB_STATUS is not NULL
+
+Group By 1,2,3,4,5,6,7,8,9,10,11,12 )
+WITH DATA;
+
+GRANT ALL PRIVILEGES ON TEMP_45.LP_Temporales
+TO wibezerra,juarodrigues,truiz,laimaretti,mmartorana
+WITH GRANT OPTION;
