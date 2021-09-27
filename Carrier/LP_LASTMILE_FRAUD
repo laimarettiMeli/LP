@@ -1,9 +1,9 @@
- -- DROP TABLE TEMP_45.LP_LASTMILE_V06_FRAUD;
--- CREATE TABLE TEMP_45.LP_LASTMILE_V06_FRAUD as (
-  DELETE FROM TEMP_45.LP_LASTMILE_V06_FRAUD WHERE date_shipped BETWEEN (current_date -150) AND  (current_date -1);
-  
-   INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
-  SELECT
+-- DROP TABLE TEMP_45.LP_LASTMILE_V06_FRAUD;
+ --CREATE TABLE TEMP_45.LP_LASTMILE_V06_FRAUD as (
+DELETE FROM TEMP_45.LP_LASTMILE_V06_FRAUD WHERE date_shipped BETWEEN (current_date -150) AND  (current_date -1);
+
+INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
+   SELECT
               row_number() OVER(PARTITION BY shipment_id,ORD_ORDER_ID ORDER BY (BPP_CASHOUT_USD) DESC) as Fcy
              ,Pais
              ,picking_type
@@ -72,7 +72,7 @@
               ,cus_nickname_buy,cus_nickname_sel,DOM_DOMAIN_ID,VERTICAL,Tipo_fraude,has_pf_pnr_c_neto,has_pf_pnr_c_bruto,pnr_c_me_solved,pnr_c_claim_solved,has_pf_empty_box,has_claim,claims_PDD,Causa_BPP,has_bpp,bpp_amt,bpp_debt 
               -- ,bpp_first_created_dt
               ,claim_first_opened_date,culpability_sel,culpability_buy,culpability
-              ,ec.SHP_ORIGIN as SHP_ORIGIN
+              ,chk2.SHP_ORIGIN as SHP_ORIGIN
               ,shp.SHP_LOGISTIC_CENTER_ID
               ,SHP_LABEL_TRACKING_NUMBER
               ,bpp_budget
@@ -90,20 +90,27 @@
                 LEFT JOIN WHOWNER.BT_CM_CLAIMS c ON c.cla_claim_id = b.cla_claim_id-- and b.cla_claim_id >0
                 LEFT JOIN scoring.mercado_envios_empty_box eb ON eb.ord_order_id=c.order_id
                 LEFT JOIN WHOWNER.LK_SHP_ADDRESS shp_a on shp.shp_receiver_address=shp_a.shp_add_id
-                LEFT JOIN (SELECT * FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk 
-                            INNER JOIN
-                             (SELECT shp_id shp_1,MAX(SHP_CHECKPOINT_DATE) ld 
-                               FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS 
-                               WHERE SHP_SUB_STATUS in ('damaged','delayed','claimed_me','stolen','lost','N/A')  GROUP BY 1) as chk_1
-                ON chk.shp_id=chk_1.shp_1 and chk.SHP_CHECKPOINT_DATE = chk_1.ld) ec
-                ON shipment_id=ec.shp_id
+                LEFT JOIN (SELECT DISTINCT chk.SHP_ID, SHP_CHECKPOINT_DATE as ldate,chk.SHP_ORIGIN 
+                              FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk
+                              INNER JOIN
+                          (select SHP_ID,MAX(CAST(SUBSTR(SHP_CHECKPOINT_ID,POSITION('-' IN SHP_CHECKPOINT_ID)+1,4) as INT)) lupdate
+                            from WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS
+                              WHERE SHP_SUB_STATUS IN ('stolen')-- and SHP_ID IN (40525084310)
+                            GROUP BY 1) chk2
+                            ON chk.SHP_ID=chk2.SHP_ID 
+                          AND CAST(SUBSTR(CHK.SHP_CHECKPOINT_ID,POSITION('-' IN CHK.SHP_CHECKPOINT_ID)+1,4) as INT)=chk2.lupdate
+--                            WHERE chk.SHP_ID IN (40525084310)
+                            )as chk2
+    
+    ON shp.shp_shipment_id = chk2.SHP_ID
                 LEFT JOIN WHOWNER.BT_TMS_TRACKING tms ON sco.shp_shipment_id=tms.shp_shipment_id
                 -- LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
             
             WHERE 
-              shp.shp_date_shipped_id BETWEEN (current_date -150) AND  (current_date -1)
+            shp.shp_date_shipped_id BETWEEN current_date -150 and current_date -1
              -- shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
-            AND shp.SHP_SOURCE_ID = 'MELI'
+            AND 
+            shp.SHP_SOURCE_ID = 'MELI'
             AND shp.shp_shipping_mode_id = 'me2'
             AND shp.shp_type = 'forward'
             AND shp.shp_substatus_id IN ('claimed_me','N/A','damaged', 'lost','stolen')
@@ -111,15 +118,19 @@
             and shp.shp_picking_type_id is not null
             -- and ((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) > 0
             and sco.bpp_cashout > 0 
-            and BPP_BUDGET not in ('returns')
+            -- and BPP_BUDGET not in ('returns')
+            --and Pais='MLB'
 
             -- and substatus <> 'NO'
-            -- AND shp.shp_shipment_id=40589245931
+            --AND shp.shp_shipment_id=40821751427--40525084310
             -- AND sco.ord_order_id=4594876194
             -- and row_number() OVER(PARTITION BY shipment_id,sco.ORD_ORDER_ID ORDER BY (BPP_CASHOUT_USD) DESC) = 1
             
-            GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41)a
-;-- )WITH DATA;
+            GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41
+            --HAVING date_bpp = '2021-09-10'
+            )a
+;
+--)WITH DATA;
 
 
 -- TOTALES
@@ -203,8 +214,8 @@ INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
                 	LEFT JOIN WHOWNER.LK_SHP_ADDRESS shp_a on shp.shp_receiver_address=shp_a.shp_add_id
                 	-- LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
                 WHERE
-                shp.shp_date_shipped_id BETWEEN current_date -150 and current_date -1
-                -- shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
+               shp.shp_date_shipped_id BETWEEN current_date -150 and current_date -1
+               --shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
 				        AND shp.SHP_SOURCE_ID = 'MELI'
                 AND shp.shp_shipping_mode_id = 'me2'
                 AND shp.shp_type = 'forward'
@@ -222,6 +233,8 @@ OR (Pais='MLB' AND c_carrier='OCASA')
 OR (Pais='MLM' AND c_carrier='OCA')
 OR (Pais='MLM' AND c_carrier='OCASA')
 OR (Fcy>1);
+
+-- SELECT DISTINCT BPP_BUDGET FROM TEMP_45.LP_LASTMILE_V06_FRAUD WHERE BPP_BUDGET not in ('returns');
 
 -- Actualizo la tabla para reemplazar valores de algunas columnas
 
