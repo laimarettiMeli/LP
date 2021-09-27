@@ -1,6 +1,6 @@
--- DROP TABLE TEMP_45.LP_LASTMILE_V06_FRAUD;
+ --DROP TABLE TEMP_45.LP_LASTMILE_V06_FRAUD;
  --CREATE TABLE TEMP_45.LP_LASTMILE_V06_FRAUD as (
-DELETE FROM TEMP_45.LP_LASTMILE_V06_FRAUD WHERE date_shipped BETWEEN (current_date -150) AND  (current_date -1);
+DELETE FROM TEMP_45.LP_LASTMILE_V06_FRAUD WHERE date_shipped BETWEEN (current_date -200) AND  (current_date-1);
 
 INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
    SELECT
@@ -17,6 +17,7 @@ INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
              ,CAST(status AS varchar(100)) as status
              ,CAST(substatus_id AS varchar(100)) as substatus_id
              ,CAST((substatus) AS varchar(100)) as substatus
+             ,BPP_CX
              ,BPP_CASHOUT_USD
              ,GMV
              -- CAMPOS DE GEO
@@ -27,6 +28,8 @@ INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
              ,CAST(claim_first_opened_date AS VARCHAR(100)) as claim_first_opened_date
              ,culpability_sel,culpability_buy,culpability
              ,SHP_ORIGIN
+             ,Push_Carrier
+             ,Tipo_Fallo
              ,' ' as driver
              ,SHP_LABEL_TRACKING_NUMBER
 			        ,bpp_budget
@@ -64,7 +67,7 @@ INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
                     THEN 'lost'
                   WHEN B.BPP_REASON_ID = 'delayed'
                     THEN 'delayed'
-                  ELSE 'NO' END) as substatus
+                  ELSE 'NO' END) as substatus 
                -- CAMPOS DE GEO
               ,SHP_ADD_ADDRESS_LINE addres,SHP_ADD_CITY_NAME city,shp_add_latitude latitude,shp_add_longitude longitude,SHP_ADD_ZIP_CODE zip_code,SHP_ADD_DELIVERY_PREFERENCE addres_ref
               --,sum((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) AS BPP_CASHOUT_USD
@@ -72,16 +75,22 @@ INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
               ,cus_nickname_buy,cus_nickname_sel,DOM_DOMAIN_ID,VERTICAL,Tipo_fraude,has_pf_pnr_c_neto,has_pf_pnr_c_bruto,pnr_c_me_solved,pnr_c_claim_solved,has_pf_empty_box,has_claim,claims_PDD,Causa_BPP,has_bpp,bpp_amt,bpp_debt 
               -- ,bpp_first_created_dt
               ,claim_first_opened_date,culpability_sel,culpability_buy,culpability
-              ,chk2.SHP_ORIGIN as SHP_ORIGIN
+              ,CAST(' ' as CHAR(50)) as SHP_ORIGIN
+              ,CASE WHEN Push_Carrier>=1 THEN 'True' ELSE 'False' END Push_Carrier
+              --,CASE WHEN claims_fallo_doble>0 THEN 'Doble' ELSE 'Simple' END Tipo_Fallo  
+              ,claims_fallo_doble Tipo_Fallo
               ,shp.SHP_LOGISTIC_CENTER_ID
               ,SHP_LABEL_TRACKING_NUMBER
               ,bpp_budget
+              ,SUM(BPP_CX) AS BPP_CX
             ,SUM(sco.bpp_cashout) AS BPP_CASHOUT_USD
             ,MIN(bpp_first_created_dt) as date_bpp
             FROM SCORING.ORDERS_MAIN_ME sco
 
-            LEFT JOIN (SELECT DISTINCT b.shp_shipment_id,b.ord_order_id,b.bpp_budget,b.BPP_REASON_ID,cla_claim_id
-                  FROM WHOWNER.BT_CM_BUYER_PROTEC_PROGRAM b) b
+            LEFT JOIN (SELECT DISTINCT b.shp_shipment_id,b.ord_order_id,b.bpp_budget,b.BPP_REASON_ID,cla_claim_id,
+                        sum((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) BPP_CX
+                  FROM WHOWNER.BT_CM_BUYER_PROTEC_PROGRAM b
+                  GROUP BY 1,2,3,4,5) b
             ON b.ord_order_id=sco.ord_order_id and b.shp_shipment_id=sco.shp_shipment_id 
             and b.cla_claim_id>0 and b.ord_order_id is not null
                   
@@ -90,25 +99,21 @@ INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
                 LEFT JOIN WHOWNER.BT_CM_CLAIMS c ON c.cla_claim_id = b.cla_claim_id-- and b.cla_claim_id >0
                 LEFT JOIN scoring.mercado_envios_empty_box eb ON eb.ord_order_id=c.order_id
                 LEFT JOIN WHOWNER.LK_SHP_ADDRESS shp_a on shp.shp_receiver_address=shp_a.shp_add_id
-                LEFT JOIN (SELECT DISTINCT chk.SHP_ID, SHP_CHECKPOINT_DATE as ldate,chk.SHP_ORIGIN 
-                              FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk
-                              INNER JOIN
-                          (select SHP_ID,MAX(CAST(SUBSTR(SHP_CHECKPOINT_ID,POSITION('-' IN SHP_CHECKPOINT_ID)+1,4) as INT)) lupdate
-                            from WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS
-                              WHERE SHP_SUB_STATUS IN ('stolen')-- and SHP_ID IN (40525084310)
-                            GROUP BY 1) chk2
-                            ON chk.SHP_ID=chk2.SHP_ID 
-                          AND CAST(SUBSTR(CHK.SHP_CHECKPOINT_ID,POSITION('-' IN CHK.SHP_CHECKPOINT_ID)+1,4) as INT)=chk2.lupdate
---                            WHERE chk.SHP_ID IN (40525084310)
-                            )as chk2
-    
-    ON shp.shp_shipment_id = chk2.SHP_ID
+                LEFT JOIN (SELECT chk.SHP_ID,COUNT(*) Push_Carrier
+                            FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk
+                            WHERE SHP_ORIGIN LIKE ('%carrier%')-- and shP_ID IN (40848058908)
+                            GROUP BY 1) as psh
+                          ON shp.shp_shipment_id = psh.SHP_ID
                 LEFT JOIN WHOWNER.BT_TMS_TRACKING tms ON sco.shp_shipment_id=tms.shp_shipment_id
+                LEFT JOIN (SEL ord_order_id as fmain_ord_order_id, claims_fallo_doble FROM scoring.fraud_main) sco_main 
+                          ON sco_main.fmain_ord_order_id=sco.ord_order_id
+                          --WHERE shp_shipment_id IN (40680315779)
+                          --WHERE ord_order_id IN ()
                 -- LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
             
             WHERE 
-            shp.shp_date_shipped_id BETWEEN current_date -150 and current_date -1
-             -- shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
+           shp.shp_date_shipped_id BETWEEN current_date-200 AND current_date-1
+           --shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
             AND 
             shp.SHP_SOURCE_ID = 'MELI'
             AND shp.shp_shipping_mode_id = 'me2'
@@ -122,15 +127,15 @@ INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
             --and Pais='MLB'
 
             -- and substatus <> 'NO'
-            --AND shp.shp_shipment_id=40821751427--40525084310
+            --AND shp.shp_shipment_id=40848058908--40525084310
             -- AND sco.ord_order_id=4594876194
             -- and row_number() OVER(PARTITION BY shipment_id,sco.ORD_ORDER_ID ORDER BY (BPP_CASHOUT_USD) DESC) = 1
             
-            GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41
+            GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43
             --HAVING date_bpp = '2021-09-10'
             )a
 ;
---)WITH DATA;
+--)WITH DATA  ;
 
 
 -- TOTALES
@@ -150,6 +155,7 @@ INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
 				,' ' as status 
 				,' ' substatus_id
 				,' ' as substatus 
+				,0 as BPP_CX
 				,0 as BPP_CASHOUT_USD 
 				,0 as GMV
         ,' ' as city
@@ -181,7 +187,9 @@ INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
 				,-1 culpability_sel
 				,-1 culpability_buy
 				,' ' culpability
-				,' ' SHP_ORIGIN
+				,CAST(' ' as CHAR(50)) as SHP_ORIGIN
+        ,CAST(' ' as CHAR(50)) as Push_Carrier
+        ,CAST(' ' as CHAR(50)) as Tipo_Fallo
 				,' ' driver
 				,' ' SHP_LABEL_TRACKING_NUMBER
 				,0 bpp_budget
@@ -214,8 +222,8 @@ INSERT INTO TEMP_45.LP_LASTMILE_V06_FRAUD
                 	LEFT JOIN WHOWNER.LK_SHP_ADDRESS shp_a on shp.shp_receiver_address=shp_a.shp_add_id
                 	-- LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
                 WHERE
-               shp.shp_date_shipped_id BETWEEN current_date -150 and current_date -1
-               --shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
+               shp.shp_date_shipped_id BETWEEN current_date-200 AND current_date-1
+              -- shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
 				        AND shp.SHP_SOURCE_ID = 'MELI'
                 AND shp.shp_shipping_mode_id = 'me2'
                 AND shp.shp_type = 'forward'
@@ -249,4 +257,91 @@ set substatus= OREPLACE (substatus, 'stolen0','stolen');
 UPDATE TEMP_45.LP_LASTMILE_V06_FRAUD
 set c_carrier = OREPLACE (c_carrier, 'MELI LOGISTICS', 'MERCADO ENVIOS');
 UPDATE TEMP_45.LP_LASTMILE_V06_FRAUD
-set c_carrier = OREPLACE (c_carrier, 'LOGISTICS', 'MERCADO ENVIOS')
+set c_carrier = OREPLACE (c_carrier, 'LOGISTICS', 'MERCADO ENVIOS');
+
+
+----- update final
+
+
+UPDATE  A
+FROM TEMP_45.LP_LASTMILE_V06_FRAUD A
+, (SELECT
+lm.ORD_ORDER_ID
+,chk2.SHP_ORIGIN as SHP_ORIGIN_2
+--,row_number() over(partition by lm.shipment_id,ORD_ORDER_ID order by LM.BPP_CASHOUT_USD ASC) as fcy2
+FROM TEMP_45.LP_LASTMILE_V06_FRAUD as lm--  WHERE date_shipped between '2021-04-01' and '2021-04-30' AND pais ='MLA'
+
+ LEFT JOIN (SELECT DISTINCT chk.SHP_ID, SHP_CHECKPOINT_DATE as ldate,chk.SHP_ORIGIN FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk
+              INNER JOIN
+                  (select SHP_ID,MAX(CAST(SUBSTR(SHP_CHECKPOINT_ID,POSITION('-' IN SHP_CHECKPOINT_ID)+1,4) as INT)) lupdate
+                  from WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS
+                  WHERE SHP_SUB_STATUS IN ('stolen')-- and SHP_ID IN (40525084310)
+                  GROUP BY 1) chk2
+              ON chk.SHP_ID=chk2.SHP_ID 
+              AND CAST(SUBSTR(CHK.SHP_CHECKPOINT_ID,POSITION('-' IN CHK.SHP_CHECKPOINT_ID)+1,4) as INT)=chk2.lupdate
+--              WHERE chk.SHP_ID IN (40525084310)
+                  )as chk2
+    
+    ON lm.shipment_id = chk2.SHP_ID
+    WHERE lm.source <>'Totals' and date_shipped BETWEEN '2020-01-01' and current_date -1) B
+SET shp_origin=b.shp_origin_2
+WHERE a.ord_order_id = b.ord_order_id AND a.source<>'Totals' and date_shipped BETWEEN '2020-01-01' and current_date -1;
+
+------UPDATE TIPO DE FALLO
+UPDATE  A
+FROM TEMP_45.LP_LASTMILE_V06_FRAUD A
+, (SELECT
+lm.ORD_ORDER_ID
+,sco_main.claims_fallo_doble as Tipo_Fallo
+--,row_number() over(partition by lm.shipment_id,ORD_ORDER_ID order by LM.BPP_CASHOUT_USD ASC) as fcy2
+FROM TEMP_45.LP_LASTMILE_V06_FRAUD as lm--  WHERE date_shipped between '2021-04-01' and '2021-04-30' AND pais ='MLA'
+
+ LEFT JOIN (SEL ord_order_id as fmain_ord_order_id, claims_fallo_doble FROM scoring.fraud_main) sco_main 
+                          ON sco_main.fmain_ord_order_id=lm.ord_order_id
+  )B
+                          
+SET Tipo_Fallo=b.Tipo_Fallo
+WHERE a.ord_order_id = b.ord_order_id AND a.source<>'Totals' and date_shipped BETWEEN '2020-01-01' and current_date -1;
+
+/*
+
+SEL COUNT(*) FROM TEMP_45.LP_LASTMILE_V06_FRAUD
+
+SELECT TIpo_Fallo,SUM(BPP_CASHOUT_USD)
+FROM TEMP_45.LP_LASTMILE_V06_FRAUD WHERE source <> 'totals'
+group by 1
+order by 2 desc
+
+
+SELECT pais,SUM(BPP_CX),SUM(BPP_CASHOUT_USD),count(*)
+--SEL ord_order_id,count(*)-- SUM(BPP_CASHOUT_USD)
+FROM TEMP_45.LP_LASTMILE_V06_FRAUD WHERE source <> 'totals'
+group by 1
+order by 2 desc
+
+SELECT TOP 10 * FROM 
+WHOWNER.LK_TRIAGE_CHECKS
+WHERE SHIPMENT_ID=40525084310--'40680315779'
+
+
+
+select claims_fallo_doble--claims_fallo_doble-->0 then 'doble'
+from scoring.fraud_main
+--WHERE shp_shipment_id IN (40680315779)
+--WHERE ord_order_id IN ()
+
+
+---TEST V06 vs V07
+
+SEL l7.shipment_id, (l7.BPP_CASHOUT_USD) as bpp_l7,(l6.BPP_CASHOUT_USD) as bpp_l6,(bpp_l7-bpp_l6) as diff
+FROM TEMP_45.LP_LASTMILE_V06_FRAUD l7
+  INNER JOIN TEMP_45.LP_LASTMILE_V06_FRAUD_BK l6 on l6.ord_order_id=l7.ord_order_id
+WHERE l7.source <> 'totals'and l7.shipment_id in (40356849815)
+AND diff <> 0
+
+DROP TABLE TEMP_45.LP_LASTMILE_V06_FRAUD_BK;
+CREATE TABLE TEMP_45.LP_LASTMILE_V06_FRAUD_BK AS (SEL * FROM TEMP_45.LP_LASTMILE_V06_FRAUD) WITH DATA;
+
+
+SELECT * FROM TEMP_45.LP_LASTMILE_V06_FRAUD_BK WHERE shipment_id in (40356849815)
+*/
