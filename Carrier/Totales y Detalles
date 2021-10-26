@@ -1,264 +1,322 @@
+-- DROP TABLE TEMP_45.LP_LASTMILE_STAGING;
 
+-- CREATE TABLE TEMP_45.LP_LASTMILE_STAGING as (
+DELETE FROM TEMP_45.LP_LASTMILE_STAGING  WHERE date_shipped BETWEEN (current_date -200) AND  (current_date-1); -- AND SOURCE ='Totals';
 
-DELETE FROM temp_45.LP_LastMile WHERE source='totals' and date_shipped BETWEEN current_date -10 and current_date-1;
-
---INSERT TOTALS
-INSERT INTO  temp_45.LP_LastMile
-
-                SELECT
-                Pais ,picking_type ,c_carrier ,date_shipped ,TotalGMV ,Total_Shipments ,shipment_Id ,CAST('1900-01-01' as DATE) as date_bpp ,CAST(( 
-                status) AS varchar(100)) as status ,CAST((substatus) AS varchar(100)) as substatus ,CAST(BPP_CASHOUT_USD as float(10)) as BPP_CASHOUT_USD ,CAST(GMV as float(10)) as GMV , 
-                --'' as addres,
-                ' ' as city,CAST('0' as varchar(10)) latitude,CAST('0' as varchar(10)) longitude,CAST('0' as varchar(10)) as zip_code,' ' as addres_ref
-                ,'Totals' as Source 
-                FROM
-                (SELECT 
-                shp.SIT_SITE_ID as Pais
-                ,SHP.shp_picking_type_id as picking_type
-                ,shp_carrier_ID_ajus as c_carrier
-                ,shp.shp_date_shipped_id as date_shipped
-                --SHP_ADD_ZIP_CODE as zip_code
-                --,zcode.latitude latitude,zcode.longitude longitude
-                --,AVERAGE(SHP_ADD_LATITUDE)latitude ,AVERAGE(SHP_ADD_LONGITUDE) longitud
-                ,sum(shp.SHP_ORDER_COST_USD) TotalGMV
-                ,count(distinct shp.shp_shipment_id) as Total_Shipments
-                ,' ' as shipment_Id 
-                ,'' as status 
-                ,'' as substatus 
-                ,0.00 as BPP_CASHOUT_USD 
-                ,0.00 as GMV
-                
-                FROM
-                WHOWNER.BT_SHP_SHIPMENTS shp
-                LEFT OUTER JOIN WHOWNER.LK_SHP_SHIPPING_SERVICES SERV ON SERV.shp_service_id=SHP.shp_service_id
-                	LEFT JOIN WHOWNER.LK_SHP_ADDRESS shp_a on shp.shp_receiver_address=shp_a.shp_add_id
-                	--LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
-                WHERE
-                shp.shp_date_shipped_id BETWEEN current_date -10 and current_date -1
-                --shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
-                and shp.shp_shipping_mode_id = 'me2'
-                and shp.shp_type = 'forward'
-                and shp.shp_picking_type_id not in ('self_service', 'default')
-                and shp.shp_picking_type_id is not null
-                group by 1,2,3,4,7,8,9,10,11) a;
-
-                                              --TEST Totals
-
---SELECT pais,YEAR(date_shipped),MONTH(date_shipped), SUM(TotalGMV)/1000000 FROM temp_45.LP_LASTMILE WHERE source ='Totals' GROUP BY 1,2,3 ORDER BY 1,2,3
-   
-                                              -- Details 1
-                                              
-DELETE FROM temp_45.LP_LastMile WHERE source='Details_1' and date_shipped BETWEEN (current_date -60) AND (current_date -1);
-                                              
-                   --DETAILS_01-> SUBSTATUS (Damaged,Lost,Stolen)
---DELETE last 60 days
-INSERT INTO temp_45.LP_LastMile
-              
-                SELECT
-                Pais
-               ,picking_type
-               ,c_carrier
-               ,date_shipped
-               ,NULL as TotalGMV
-               ,NULL as Total_Shipments
-               ,shipment_Id 
-               ,date_bpp-- pongo asi porque no se usa el campo, en caso de querer usarlo traer solo date_bpp
-               ,CAST(status AS varchar(100)) as status
-               ,CAST((substatus) AS varchar(100)) as substatus
-               ,BPP_CASHOUT_USD
-               ,GMV
-               --,addres
-               ,city,latitude,longitude,zip_code,addres_ref
-               ,'Details_1' as Source
-              
-              FROM
-              
-              (SELECT --DISTINCT
-               shp.shp_shipment_id as shipment_Id, SHP.shp_date_shipped_id as date_shipped, SHP.shp_status_id as status, SHP.shp_substatus_id as substatus, SHP.shp_picking_type_id as picking_type, SHP.sit_site_id as Pais, serv.shp_carrier_ID_ajus as c_carrier, shp.SHP_ORDER_COST_USD GMV
-              ,SHP_ADD_ADDRESS_LINE addres,SHP_ADD_CITY_NAME city
-              ,shp_add_latitude latitude,shp_add_longitude longitude,SHP_ADD_ZIP_CODE zip_code,SHP_ADD_DELIVERY_PREFERENCE addres_ref
-              ,sum((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) AS BPP_CASHOUT_USD
-              ,MIN(B.bpp_created_dt) as date_bpp--CAST('1900-01-01' as DATE) as date_bpp,-- 
-              FROM WHOWNER.BT_CM_BUYER_PROTEC_PROGRAM B
-              	LEFT JOIN WHOWNER.BT_SHP_SHIPMENTS SHP ON SHP.shp_shipment_id=B.shp_shipment_id
-              	LEFT OUTER JOIN WHOWNER.LK_SHP_SHIPPING_SERVICES SERV ON SERV.shp_service_id=SHP.shp_service_id
-              	LEFT JOIN WHOWNER.LK_SHP_ADDRESS shp_a on shp.shp_receiver_address=shp_a.shp_add_id
-              	
-              	--LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
-              
-              WHERE
-              shp.shp_date_shipped_id BETWEEN (current_date -2) AND  (current_date -1)
-              --shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
-              AND substatus IN ('damaged', 'lost','stolen')
-              and shp.shp_picking_type_id not in ('self_service', 'default')
-              and shp.shp_picking_type_id is not null
-              and ((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll))>0
-              GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14) as b;
-
-
-                                              --TEST D1
---SELECT pais,YEAR(date_shipped),MONTH(date_shipped), SUM(GMV)/1000000 FROM temp_45.LP_Carrier_geo_D1 WHERE source ='Details_1' GROUP BY 1,2,3 ORDER BY 1,2,3;
-
-
-                                              -- Details 2
-                                              
-                                              --DETAILS_02 -> SUBSTATUS (Claimed_me,N/A)
-
-DELETE FROM temp_45.LP_LastMile WHERE source='Details_2' and date_shipped BETWEEN (current_date -30) AND  (current_date -1);
---INSERT DETAILS_02
-INSERT INTO temp_45.LP_LastMile
-            SELECT
-              Pais
+INSERT INTO TEMP_45.LP_LASTMILE_STAGING
+   SELECT
+              row_number() OVER(PARTITION BY shipment_id,ORD_ORDER_ID ORDER BY (BPP_CASHOUT_USD) DESC) as Fcy
+             ,Pais
              ,picking_type
              ,c_carrier
              ,date_shipped
+             ,date_delivered
              ,NULL as TotalGMV
              ,NULL as Total_Shipments
-             --,CAST(shipment_Id AS varchar(100)) as shipment_Id 
-             ,shipment_Id
-             ,date_bpp-- pongo asi porque no se usa el campo, en caso de querer usarlo traer solo date_bpp
+             ,shipment_Id,ord_order_id
+             ,date_bpp
              ,CAST(status AS varchar(100)) as status
+             ,CAST(substatus_id AS varchar(100)) as substatus_id
              ,CAST((substatus) AS varchar(100)) as substatus
+             ,BPP_CX
              ,BPP_CASHOUT_USD
              ,GMV
-             --,addres
-             ,city,latitude,longitude,zip_code,addres_ref
-             ,'Details_2' as Source
+             -- CAMPOS DE GEO
+             ,city,latitude,longitude,zip_code,addres_ref,SHP_LOGISTIC_CENTER_ID
+             -- CAMPOS DE FRAUDE
+             ,cus_nickname_buy,cus_nickname_sel,DOM_DOMAIN_ID,VERTICAL,Tipo_fraude,has_pf_pnr_c_neto,has_pf_pnr_c_bruto,pnr_c_me_solved,pnr_c_claim_solved,has_pf_empty_box,has_claim,claims_PDD,Causa_BPP,has_bpp,bpp_amt,bpp_debt
+             -- ,bpp_first_created_dt
+             ,CAST(claim_first_opened_date AS VARCHAR(100)) as claim_first_opened_date
+             ,culpability_sel,culpability_buy,culpability
+             ,SHP_ORIGIN
+             ,Push_Carrier
+             ,Tipo_Fallo
+             ,' ' as driver
+             ,SHP_LABEL_TRACKING_NUMBER
+			        ,bpp_budget
+			        ,SHP_RECEIVER_ID
+              ,GEO_RCV_ADDRESS_ID
+              ,GEO_RCV_COUNTRY_NAME
+              ,GEO_RCV_STATE_NAME
+              ,GEO_RCV_CITY_NAME
+              ,GEO_RCV_ZIP_CODE
+              ,GEO_RCV_ZIP_CODE_SHORT
+              ,TMS_BUYER_INFO_ADDRESS_LINE
+              ,TMS_BUYER_INFO_ZIP_CODE
+              ,TMS_BUYER_INFO_NAME
+              ,TMS_BUYER_INFO_ID
+              ,SHP_OUT_ADDED_BY_USER
+              ,CW_GEO_RCV_LONGITUDE
+              ,CW_GEO_RCV_LATITUDE
+			       ,CASE
+			         WHEN has_pf_empty_box = 1 and date_delivered is not null then 'EMPTY_BOX'
+               WHEN has_pf_pnr_c_neto = 1 and has_pf_empty_box = 0 and date_delivered is not null then 'PNR_C'
+               WHEN has_pf_pnr_c_bruto = 1 and pnr_c_me_solved = 1 and has_pf_pnr_c_neto = 0 and has_pf_empty_box = 0 and date_delivered is not null then 'PNR_C_R'
+               WHEN has_pf_pnr_c_bruto = 1 and pnr_c_me_solved = 0 and has_pf_pnr_c_neto = 0 and has_pf_empty_box = 0 and date_delivered is not null then 'PNR_C_OTROS'
+               ELSE 'N/A' END as F_Clasification
+             ,CASE WHEN substatus_id IN ('damaged', 'lost','stolen') THEN 'Details_1' ELSE 'Details_2' END as Source
             
              FROM
              
             (SELECT 
-            shp.shp_shipment_id as shipment_Id,
-            SHP.shp_date_shipped_id as date_shipped,
-            SHP.shp_status_id as status,
-            SHP.shp_picking_type_id as picking_type,
-            SHP.sit_site_id as Pais,
-            serv.shp_carrier_ID_ajus as c_carrier,
-            shp.SHP_ORDER_COST_USD GMV,
-            (CASE
+            shp.shp_shipment_id as shipment_Id
+            ,shp.shp_date_shipped_id as date_shipped
+            ,SHP.shp_date_delivered_id as date_delivered
+            ,sco.ord_order_id
+            ,SHP.shp_status_id as status
+            ,shp.shp_substatus_id as substatus_id
+            ,SHP.shp_picking_type_id as picking_type
+            ,SHP.sit_site_id as Pais
+            ,serv.shp_carrier_ID_ajus as c_carrier
+            ,shp.SHP_ORDER_COST_USD GMV
+            ,(CASE
+                  WHEN substatus_id IN ('damaged', 'lost','stolen') then substatus_id
                   WHEN c.cla_reason_id in ('undelivered', 'automatic_claim') and eb.flag_empty_box_pf is null and shp.shp_datetime_delivered_id is not null and (shp.shp_datetime_delivered_id <= c.cla_date_claim_opened_dt) 
                     THEN 'stolen' --'PNR Contradictorio'
-                  --WHEN  eb.flag_empty_box_pf = 1 then 'Caja Vacia'
-                  WHEN (c.cla_reason_id in ('defective_item') and (b.bpp_instant_recovery_amt_doll + b.bpp_late_recoveries_amt_doll + b.bpp_current_debt_amt_doll) = 0 and c.cla_sub_status not like '%benefited_both_allowed%') 
-                    THEN 'NO'
+                  WHEN  eb.flag_empty_box_pf = 1 then 'Caja Vacia'
+                  -- WHEN (c.cla_reason_id in ('defective_item') and (B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B--.bpp_late_recoveries_amt_doll) = 0 and c.cla_sub_status not like '%benefited_both_allowed%') 
+                    -- THEN 'NO'
                   WHEN (shp.shp_status_id = 'not_delivered' and shp.shp_substatus_id not in ('claimed_me')) 
                     THEN 'lost'
                   WHEN b.bpp_reason_id = 'shipment'
                     THEN 'lost'
                   WHEN B.BPP_REASON_ID = 'delayed'
                     THEN 'delayed'
-                  ELSE 'NO' END) as substatus
-            ,SHP_ADD_ADDRESS_LINE addres,SHP_ADD_CITY_NAME city
-            ,shp_add_latitude latitude,shp_add_longitude longitude,SHP_ADD_ZIP_CODE zip_code,SHP_ADD_DELIVERY_PREFERENCE addres_ref
-            
-            ,sum((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) AS BPP_CASHOUT_USD
-            ,MIN(B.bpp_created_dt) as date_bpp--CAST('1900-01-01' as DATE) as date_bpp,-- 
-            
-            FROM WHOWNER.BT_CM_BUYER_PROTEC_PROGRAM B
-                LEFT JOIN WHOWNER.BT_SHP_SHIPMENTS SHP ON SHP.shp_shipment_id=B.shp_shipment_id
-                LEFT OUTER JOIN WHOWNER.LK_SHP_SHIPPING_SERVICES SERV ON SERV.shp_service_id=SHP.shp_service_id
-                LEFT OUTER JOIN WHOWNER.BT_CM_CLAIMS c ON c.cla_claim_id = b.cla_claim_id and b.cla_claim_id >0
+                  ELSE 'NO' END) as substatus 
+               -- CAMPOS DE GEO
+              ,SHP_ADD_ADDRESS_LINE addres,SHP_ADD_CITY_NAME city,shp_add_latitude latitude,shp_add_longitude longitude,SHP_ADD_ZIP_CODE zip_code,SHP_ADD_DELIVERY_PREFERENCE addres_ref
+              --,sum((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) AS BPP_CASHOUT_USD
+              -- CAMPOS DE FRAUDE
+              ,cus_nickname_buy,cus_nickname_sel,DOM_DOMAIN_ID,VERTICAL,Tipo_fraude,has_pf_pnr_c_neto,has_pf_pnr_c_bruto,pnr_c_me_solved,pnr_c_claim_solved,has_pf_empty_box,has_claim,claims_PDD,Causa_BPP,has_bpp,bpp_amt,bpp_debt 
+              -- ,bpp_first_created_dt
+              ,claim_first_opened_date,culpability_sel,culpability_buy,culpability
+              ,CAST(' ' as CHAR(50)) as SHP_ORIGIN
+              ,CASE WHEN Push_Carrier>=1 THEN 'True' ELSE 'False' END Push_Carrier
+              --,CASE WHEN claims_fallo_doble>0 THEN 'Doble' ELSE 'Simple' END Tipo_Fallo  
+              ,claims_fallo_doble Tipo_Fallo
+              ,shp.SHP_LOGISTIC_CENTER_ID
+              ,COALESCE(SHP_LABEL_TRACKING_NUMBER,SHP.SHP_TRACKING_NUMBER_ID) AS SHP_LABEL_TRACKING_NUMBER
+              ,bpp_budget
+              ,SM.SHP_RECEIVER_ID
+              ,SM.GEO_RCV_ADDRESS_ID
+              ,SM.GEO_RCV_COUNTRY_NAME
+              ,SM.GEO_RCV_STATE_NAME
+              ,SM.GEO_RCV_CITY_NAME
+              ,SM.GEO_RCV_ZIP_CODE
+              ,SM.GEO_RCV_ZIP_CODE_SHORT
+              ,GEO.TMS_BUYER_INFO_ADDRESS_LINE
+              ,GEO.TMS_BUYER_INFO_ZIP_CODE
+              ,GEO.TMS_BUYER_INFO_NAME
+              ,GEO.TMS_BUYER_INFO_ID
+              ,GEO.SHP_OUT_ADDED_BY_USER
+              ,GEO.CW_GEO_RCV_LONGITUDE
+              ,GEO.CW_GEO_RCV_LATITUDE
+              ,SUM(BPP_CX) AS BPP_CX
+            ,SUM(sco.bpp_cashout) AS BPP_CASHOUT_USD
+            ,MIN(bpp_first_created_dt) as date_bpp
+            FROM SCORING.ORDERS_MAIN_ME sco
+
+            LEFT JOIN (SELECT DISTINCT b.shp_shipment_id,b.ord_order_id,b.bpp_budget,b.BPP_REASON_ID,cla_claim_id,
+                        sum((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) BPP_CX
+                  FROM WHOWNER.BT_CM_BUYER_PROTEC_PROGRAM b
+                  GROUP BY 1,2,3,4,5) b
+            ON b.ord_order_id=sco.ord_order_id and b.shp_shipment_id=sco.shp_shipment_id 
+            and b.cla_claim_id>0 and b.ord_order_id is not null
+                  
+                LEFT JOIN WHOWNER.BT_SHP_SHIPMENTS SHP ON SHP.shp_shipment_id=sco.shp_shipment_id
+                LEFT JOIN WHOWNER.LK_SHP_SHIPPING_SERVICES SERV ON SERV.shp_service_id=SHP.shp_service_id
+                LEFT JOIN WHOWNER.BT_CM_CLAIMS c ON c.cla_claim_id = b.cla_claim_id-- and b.cla_claim_id >0
                 LEFT JOIN scoring.mercado_envios_empty_box eb ON eb.ord_order_id=c.order_id
                 LEFT JOIN WHOWNER.LK_SHP_ADDRESS shp_a on shp.shp_receiver_address=shp_a.shp_add_id
-                --LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
-            
-            WHERE shp.shp_date_shipped_id BETWEEN (current_date -30) AND  (current_date -1)
-            --shp.shp_date_shipped_id BETWEEN '2020-01-01' and '2020-03-01'
-            --shp.shp_date_shipped_id BETWEEN '2020-03-02' and '2020-06-01'
-            --shp.shp_date_shipped_id BETWEEN '2020-06-02' and '2020-08-01'
-            --shp.shp_date_shipped_id BETWEEN '2020-08-02' and '2020-10-01'
-            --shp.shp_date_shipped_id BETWEEN '2020-10-02' and '2020-12-01'
-            --shp.shp_date_shipped_id BETWEEN '2020-12-02' and '2021-02-01'
-            --shp.shp_date_shipped_id BETWEEN '2021-02-02' and '2021-04-23'
-            AND b.bpp_budget IN ('mercado_envios','mediations')
-            AND shp.SHP_SOURCE_ID = 'MELI'
+                LEFT JOIN (SELECT chk.SHP_ID,COUNT(*) Push_Carrier
+                            FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk
+                            WHERE SHP_ORIGIN LIKE ('%carrier%') -- and shP_ID IN (40848058908)
+                            GROUP BY 1) as psh
+                          ON shp.shp_shipment_id = psh.SHP_ID
+                LEFT JOIN WHOWNER.BT_TMS_TRACKING tms ON sco.shp_shipment_id=tms.shp_shipment_id
+                LEFT JOIN (SEL ord_order_id as fmain_ord_order_id, claims_fallo_doble FROM scoring.fraud_main) sco_main 
+                          ON sco_main.fmain_ord_order_id=sco.ord_order_id
+                LEFT JOIN SHIPMENT.BT_SHP_SHIPMENTS_SUMMARY AS SM ON (SM.SHP_SHIPMENT_ID=SCO.SHP_SHIPMENT_ID)
+                LEFT JOIN TEMP_45.LP_LK_GEOPUNTOS AS GEO 
+                      ON (SM.SHP_RECEIVER_ID=GEO.SHP_RECEIVER_ID) AND (SM.GEO_RCV_ADDRESS_ID=GEO.GEO_RCV_ADDRESS_ID)
+
+
+            WHERE 
+           shp.shp_date_shipped_id BETWEEN current_date-200 AND current_date-1
+           --shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
+            AND 
+            shp.SHP_SOURCE_ID = 'MELI'
             AND shp.shp_shipping_mode_id = 'me2'
             AND shp.shp_type = 'forward'
-            AND shp.shp_substatus_id IN ('claimed_me','N/A')
+            -- AND shp.shp_substatus_id IN ('claimed_me','N/A','damaged', 'lost','stolen')
             and shp.shp_picking_type_id not in ('self_service', 'default')
             and shp.shp_picking_type_id is not null
-            and ((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) > 0
-            and substatus <> 'NO'
-            
-            GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14)a;
-                                                                             --TEST D2
-            --SELECT pais,YEAR(date_shipped),MONTH(date_shipped), SUM(GMV)/1000000 FROM temp_45.LP_Carrier_geo_D1 WHERE source ='Details_2' GROUP BY 1,2,3 ORDER BY 1,2,3;
-                                        
-                                        --TEST Total
---  SELECT pais,source,YEAR(date_shipped),MONTH(date_shipped), SUM(BPP_CASHOUT_USD), SUM(TOTALGMV) FROM temp_45.LP_LastMile GROUP BY 1,2,3,4 ORDER BY 1,2,3,4
+            -- and ((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) > 0
+            and sco.bpp_cashout > 0 
+            -- and BPP_BUDGET not in ('returns')
+            -- and Pais='MLB'
 
---Borro Outliers
-DELETE FROM temp_45.LP_LastMile WHERE 
+            -- and substatus <> 'NO'
+            -- AND shp.shp_shipment_id=40848058908--40525084310
+            -- AND sco.ord_order_id=4594876194
+            -- and row_number() OVER(PARTITION BY shipment_id,sco.ORD_ORDER_ID ORDER BY (BPP_CASHOUT_USD) DESC) = 1
+            
+            GROUP BY 
+            1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30
+            ,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57
+           
+            )a
+;
+--)WITH DATA  ;
+
+
+-- TOTALES
+INSERT INTO TEMP_45.LP_LASTMILE_STAGING
+  SELECT
+				1 Fcy
+        ,Pais 
+				,picking_type 
+				,c_carrier 
+				,date_shipped
+				,CAST('1900-01-01' as DATE) as date_delivered
+				,TotalGMV 
+				,Total_Shipments 
+				,0 shipment_Id 
+				,0 ORD_ORDER_ID
+				,CAST('1900-01-01' as DATE) as date_bpp 
+				,' ' as status 
+				,' ' substatus_id
+				,' ' as substatus 
+				,0 as BPP_CX
+				,0 as BPP_CASHOUT_USD 
+				,0 as GMV
+        ,' ' as city
+				,CAST('0' as varchar(10)) latitude
+				,CAST('0' as varchar(10)) longitude
+				,CAST('0' as varchar(10)) as zip_code
+				,' ' as addres_ref
+				,' ' as SHP_LOGISTIC_CENTER_ID
+				-- CAMPOS FRAUDE
+				,' ' cus_nickname_buy
+				,' ' cus_nickname_sel
+				,' ' DOM_DOMAIN_ID
+				,' ' VERTICAL
+				,' ' Tipo_fraude
+				,-1 has_pf_pnr_c_neto
+				,-1 has_pf_pnr_c_bruto
+				,-1 pnr_c_me_solved
+				,-1 pnr_c_claim_solved
+				,-1 has_pf_empty_box
+				,-1 has_claim
+				,-1 claims_PDD
+				,' ' Causa_BPP
+				,-1 has_bpp
+				,-1 bpp_amt
+				,-1 bpp_debt
+				,' ' as claim_first_opened_date
+				,-1 culpability_sel
+				,-1 culpability_buy
+				,' ' culpability
+				,CAST(' ' as CHAR(50)) as SHP_ORIGIN
+        ,CAST(' ' as CHAR(50)) as Push_Carrier
+        ,CAST(' ' as CHAR(50)) as Tipo_Fallo
+				,' ' driver
+				,' ' SHP_LABEL_TRACKING_NUMBER
+				,0 bpp_budget
+				,' ' SHP_RECEIVER_ID
+        ,' ' GEO_RCV_ADDRESS_ID
+        ,' ' GEO_RCV_COUNTRY_NAME
+        ,' ' GEO_RCV_STATE_NAME
+        ,' ' GEO_RCV_CITY_NAME
+        ,' ' GEO_RCV_ZIP_CODE
+        ,' ' GEO_RCV_ZIP_CODE_SHORT
+        ,' ' TMS_BUYER_INFO_ADDRESS_LINE
+        ,' ' TMS_BUYER_INFO_ZIP_CODE
+        ,' ' TMS_BUYER_INFO_NAME
+        ,' ' TMS_BUYER_INFO_ID
+        ,' ' SHP_OUT_ADDED_BY_USER
+        ,' ' CW_GEO_RCV_LONGITUDE
+        ,' ' CW_GEO_RCV_LATITUDE
+				,' ' F_Clasification
+        ,'Totals' as Source
+				 
+                FROM
+                (SELECT 
+                shp.SIT_SITE_ID as Pais
+                ,SHP.shp_picking_type_id as picking_type
+                ,shp_carrier_ID_ajus as c_carrier
+                ,shp.shp_date_shipped_id as date_shipped
+                ,SHP_LOGISTIC_CENTER_ID
+                ,sum(shp.SHP_ORDER_COST_USD) TotalGMV
+                ,count(distinct shp.shp_shipment_id) as Total_Shipments
+                
+                FROM
+                WHOWNER.BT_SHP_SHIPMENTS shp
+                LEFT OUTER JOIN WHOWNER.LK_SHP_SHIPPING_SERVICES SERV ON SERV.shp_service_id=SHP.shp_service_id
+                	LEFT JOIN WHOWNER.LK_SHP_ADDRESS shp_a on shp.shp_receiver_address=shp_a.shp_add_id
+                	-- LEFT JOIN temp_45.LP_zip_code zcode on zcode.zip_code=shp_a.SHP_ADD_ZIP_CODE and zcode.country=shp.sit_site_id
+                WHERE
+                shp.shp_date_shipped_id BETWEEN current_date-200 AND current_date-1
+               -- shp.shp_date_shipped_id BETWEEN '2020-01-01' and current_date -1
+				        AND shp.SHP_SOURCE_ID = 'MELI'
+                AND shp.shp_shipping_mode_id = 'me2'
+                AND shp.shp_type = 'forward'
+                AND shp.shp_picking_type_id not in ('self_service', 'default')
+                AND shp.shp_picking_type_id is not null
+
+                group by 1,2,3,4,5) a;
+
+-- Borro Outliers
+DELETE FROM TEMP_45.LP_LASTMILE_STAGING WHERE 
 picking_type in('cross_dockgin','UNKNOWN')
 OR c_carrier in ('N/A')
 OR (Pais='MLA' AND c_carrier='CORREIOS')
 OR (Pais='MLB' AND c_carrier='OCASA')
 OR (Pais='MLM' AND c_carrier='OCA')
-OR (Pais='MLM' AND c_carrier='OCASA');
+OR (Pais='MLM' AND c_carrier='OCASA')
+OR (Fcy>1);
 
---Actualizo la tabla para reemplazar valores de algunas columnas
+-- SELECT DISTINCT BPP_BUDGET FROM TEMP_45.LP_LASTMILE_STAGING WHERE BPP_BUDGET not in ('returns');
 
-UPDATE temp_45.LP_LastMile
+-- Actualizo la tabla para reemplazar valores de algunas columnas
+
+UPDATE TEMP_45.LP_LASTMILE_STAGING
 set c_carrier = OREPLACE (c_carrier, 'MOTONORTE', 'WEBPACK');
-UPDATE temp_45.LP_LastMile
-set c_carrier = OREPLACE (c_carrier, 'REPROCESOS CARRITO', 'LOGISTICS');
-UPDATE temp_45.LP_LastMile
+UPDATE TEMP_45.LP_LASTMILE_STAGING
+set c_carrier = OREPLACE (c_carrier, 'REPROCESOS CARRITO', 'MERCADO ENVIOS');
+UPDATE TEMP_45.LP_LASTMILE_STAGING
 set c_carrier = OREPLACE (c_carrier, 'MERCADOENVIOS', 'MERCADO ENVIOS');
-UPDATE temp_45.LP_LastMile
+UPDATE TEMP_45.LP_LASTMILE_STAGING
 set substatus= OREPLACE (substatus, 'stolen0','stolen');
+UPDATE TEMP_45.LP_LASTMILE_STAGING
+set c_carrier = OREPLACE (c_carrier, 'MELI LOGISTICS', 'MERCADO ENVIOS');
+UPDATE TEMP_45.LP_LASTMILE_STAGING
+set c_carrier = OREPLACE (c_carrier, 'LOGISTICS', 'MERCADO ENVIOS');
 
-SELECT * FROM temp_45.LP_LastMile
 
-----Clasificacion de fraude
+----- UPDATE ORIGIN
 
-DROP TABLE TEMP_45.LP_LASTIMILE_V02;
-CREATE TABLE TEMP_45.LP_LASTMILE_V02 AS(
-SELECT 
-lm.*
-,sco.cus_nickname_buy
-,sco.cus_nickname_sel
-,sco.ORD_ORDER_ID
-,sco.shp_picking_type_id
-,sco.shp_date_delivered_id
-,sco.GMV_USD
-,sco.bpp_cashout
-,sco.DOM_DOMAIN_ID
-,sco.VERTICAL
-,sco.Causa_BPP
-,sco.bpp_first_created_dt
-,sco.culpability
-,sco.Tipo_fraude
-,ec.SHP_ORIGIN
-,CASE
-  WHEN UPPER(sco.Tipo_fraude) LIKE '%FRAUD_%' THEN 'FRAUD'
-  WHEN UPPER(sco.Tipo_fraude) LIKE '%CARRIER_PNR_C%' THEN 'FRAUD'
-  WHEN UPPER(sco.Tipo_fraude) LIKE '%CARRIER_EMPTY_BOX%'  THEN 'FRAUD'
-  WHEN UPPER(ec.SHP_ORIGIN) LIKE '%CX%' THEN 'CX'
-  WHEN UPPER(ec.SHP_ORIGIN) LIKE '%MELI%' THEN 'MELI'
-  WHEN UPPER(ec.SHP_ORIGIN) LIKE '%SHIPPING%' THEN 'SHIPPING'
-  WHEN UPPER(ec.SHP_ORIGIN) LIKE '%CARRIER%' THEN 'CARRIER'
-  ELSE 'PENDING ANALYSIS' 
-END Clasification
-,CASE
-  WHEN Clasification = 'FRAUD' THEN 'FRAUD'
-  ELSE UPPER(Substatus)
-END Substatus_Clasification
-,CASE
-  WHEN lm.source <> 'Totals' 
-   THEN row_number() OVER(PARTITION BY lm.shipment_id ORDER BY lm.shipment_id DESC) 
-   ELSE 1
-  END AS SHP_SHIPMENT_ORDER
 
-FROM TEMP_45.LP_LASTMILE as lm
-  LEFT JOIN SCORING.ORDERS_MAIN_ME sco on sco.shp_shipment_id=lm.shipment_id
-  LEFT JOIN (SELECT * FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk 
-            INNER JOIN
-             (SELECT shp_id shp_1,MAX(SHP_CHECKPOINT_DATE) ld 
-               FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS 
-               WHERE SHP_SUB_STATUS in ('damaged','delayed','claimed_me','stolen','lost')  GROUP BY 1) as chk_1
-             ON chk.shp_id=chk_1.shp_1 and chk.SHP_CHECKPOINT_DATE = chk_1.ld) ec
-        
-          ON lm.shipment_id=ec.shp_id
-)WITH DATA;
+UPDATE  A
+FROM TEMP_45.LP_LASTMILE_STAGING A
+, (SELECT
+lm.ORD_ORDER_ID
+,chk2.SHP_ORIGIN as SHP_ORIGIN_2
+--,row_number() over(partition by lm.shipment_id,ORD_ORDER_ID order by LM.BPP_CASHOUT_USD ASC) as fcy2
+FROM TEMP_45.LP_LASTMILE_STAGING as lm--  WHERE date_shipped between '2021-04-01' and '2021-04-30' AND pais ='MLA'
 
-SELECT * FROM TEMP_45.LP_LASTMILE_V02
+ LEFT JOIN (SELECT DISTINCT chk.SHP_ID, SHP_CHECKPOINT_DATE as ldate,chk.SHP_ORIGIN FROM WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk
+              INNER JOIN
+                  (select SHP_ID,MAX(CAST(SUBSTR(SHP_CHECKPOINT_ID,POSITION('-' IN SHP_CHECKPOINT_ID)+1,4) as INT)) lupdate
+                  from WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS
+                  WHERE SHP_SUB_STATUS IN ('stolen')-- and SHP_ID IN (40525084310)
+                  GROUP BY 1) chk2
+              ON chk.SHP_ID=chk2.SHP_ID 
+              AND CAST(SUBSTR(CHK.SHP_CHECKPOINT_ID,POSITION('-' IN CHK.SHP_CHECKPOINT_ID)+1,4) as INT)=chk2.lupdate
+--              WHERE chk.SHP_ID IN (40525084310)
+                  )as chk2
+    
+    ON lm.shipment_id = chk2.SHP_ID
+    WHERE lm.source <>'Totals' and date_shipped BETWEEN '2020-01-01' and current_date -1) B
+SET shp_origin=b.shp_origin_2
+WHERE a.ord_order_id = b.ord_order_id AND a.source<>'Totals' and date_shipped BETWEEN '2020-01-01' and current_date -1;
