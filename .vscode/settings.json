@@ -1,0 +1,17 @@
+{
+    "sqltools.connections": [
+        {
+            "port": 1025,
+            "tdsqloptions": {
+                "logmech": "LDAP",
+                "encryptdata": true
+            },
+            "previewLimit": 50,
+            "askForPassword": true,
+            "driver": "SQLTools Teradata Driver",
+            "name": "Teradata",
+            "server": "teradata.melicloud.com",
+            "username": "laimaretti"
+        }
+    ]
+}

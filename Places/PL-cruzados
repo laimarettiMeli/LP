@@ -1,0 +1,159 @@
+SELECT
+  s.sit_site_id,
+  s.shp_shipment_id as shp_id,
+  --' ' as shp_shipment_id,
+  s.shp_sender_id as Seller_id,
+  s.shp_picking_type_id,
+  s.shp_status_id ,
+  s.shp_substatus_id,
+--a2.shp_add_city_name,
+--a2.shp_add_state_name,
+--a2.shp_add_address_line,
+--a2.shp_add_neighborhood_name,
+--a2.shp_add_latitude,
+--a2.shp_add_longitude,
+  a2.shp_add_zip_code,
+  ec1.shp_carrier_id as carrier_id, -- carrier_id
+  ec1.shp_agency_id as agency_id, -- id del place de drop_off
+  shp_company_name,--COmpany name
+  case when carrier_id=341979545 and  s.sit_site_id='MLB' then 'Pegaki'
+       when carrier_id=849817033 and  s.sit_site_id='MLB' then 'Kangu'
+       when carrier_id=1313953487 and s.sit_site_id='MCO' then 'Kangu'
+       when carrier_id=17243954 and  s.sit_site_id='MLM' then 'Kangu'
+       when carrier_id=542124431 and  s.sit_site_id='MLA' then 'Intermedio SRL'--Places
+       when carrier_id=1703373469 and  s.sit_site_id='MLC' then 'FLASHBOX'
+       when shp_company_name='DHL' then 'DHL'
+       when (agency_id like '%DO%' or shp_company_name='OCASA') and  s.sit_site_id='MLA' then 'Pick it'
+       when (char_length(agency_id)=4 or shp_company_name='Punto HOP')  and  s.sit_site_id='MLA' then 'Hop'
+       when carrier_id=10 then 'Propios Meli'
+       else 'Sin clasificar' end Agregador_manual,
+  ec6.shp_sub_status estado_not_del,
+  tms.TMS_TR_PROCES_TYPE Hub_picking_Type, --Datos de tms
+  tms.TMS_HUB_STATUS_ID  Hub_Status,
+  tms.tms_tr_logistic_center_id  LC ,
+  tms.shp_inb_reject_reason,
+  tms.SHP_INB_CARRIER_NAME,
+  min(s.shp_datetime_handling_id + interval '1' hour) as fecha_handling, -- fecha de generación de etiqueta que es despues que se aprobó el pago
+  min(ec1.shp_checkpoint_date + interval '1' hour) as fecha_dropoff, -- fecha de despacho en el place
+  min(ec2.shp_checkpoint_date + interval '1' hour) as fecha_pickup, -- fecha de colecta en el place
+  min(ec3.shp_checkpoint_date + interval '1' hour) as fecha_inhub, -- fecha de llegada en el XD
+  min(ec6.shp_checkpoint_date + interval '1' hour) as fecha_not_delivered, -- f
+  min(ec7.shp_checkpoint_date + interval '1' hour) as fecha_extraviado, -- fecha de entrega al buyer
+  min(ec8.shp_checkpoint_date + interval '1' hour) as fecha_returned, -- fecha de entrega al buyer
+  min(s.shp_datetime_shipped_id + interval '1' hour) as fecha_salidaXD, -- fecha de salida de XD
+  min(s.shp_datetime_delivered_id + interval '1' hour) as fecha_delivery, -- fecha de entrega al buyer
+  SUM(s.shp_order_cost) Order_cost,
+  SUM(s.shp_order_cost_usd) Order_Cost_USD,
+  sum((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) AS BPP_CASHOUT_USD,
+  1 as QTY,
+  'Details' as Source
+FROM WHOWNER.BT_SHP_SHIPMENTS as s
+  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec1 on ec1.shp_id = s.shp_shipment_id  and ec1.shp_status = 'ready_to_ship' and ec1.shp_sub_status = 'dropped_off'
+  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec2 on ec2.shp_id = s.shp_shipment_id  and ec2.shp_status = 'ready_to_ship' and ec2.shp_sub_status = 'picked_up'
+  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec3 on ec3.shp_id = s.shp_shipment_id  and ec3.shp_status = 'ready_to_ship' and ec3.shp_sub_status = 'in_hub'
+  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec6 on ec6.shp_id = s.shp_shipment_id  and ec6.shp_status = 'not_delivered'
+  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec7 on ec7.shp_id = s.shp_shipment_id  and ec7.shp_tracking_code in ('0623','0617','PL-0623','PL-0617') --Codigos lost y stolen
+  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec8 on ec8.shp_id = s.shp_shipment_id  and ec8.shp_tracking_code in ('0609','0633','0669') --Codigos de returned
+  LEFT JOIN WHOWNER.LK_SHP_COMPANIES com  on com.shp_company_id=ec1.shp_carrier_id
+  LEFT JOIN lk_shp_address a2 ON s.shp_sender_address = a2.shp_add_id
+  LEFT JOIN WHOWNER.BT_TMS_TRACKING tms on tms.shp_shipment_id=s.shp_shipment_id
+  LEFT JOIN WHOWNER.BT_CM_BUYER_PROTEC_PROGRAM B on s.shp_shipment_id=B.shp_shipment_id
+WHERE s.sit_site_id in ( 'MLB','MLA','MLM','MLC','MCO') AND --'MLC','MCO'
+      --s.shp_date_handling_id BETWEEN  '2021-01-01' and current_date -2 AND--  ${begin_date | type:date} and ${end_date | type:date} AND
+      (ec1.shp_checkpoint_date + interval '1' hour)  BETWEEN  DATE '2021-01-01' and current_date -2 AND
+      s.shp_picking_type_id in ( 'cross_docking','xd_drop_off','drop_off','fulfillment') AND
+      s.shp_source_id = 'MELI' --Envios solo del marketplace
+      AND s.shp_shipping_mode_id = 'me2'
+      AND s.shp_type = 'forward' and
+      ec1.shp_checkpoint_date is not null AND
+	  --agency_id in ('15482','14206','387794','277703','63683','122929')
+	  s.shp_sender_id in ('703236581')
+      -- ec2.shp_checkpoint_date is null AND--Este campo muestra si fue colectado del place o no. Si es null es que no fue colectado
+      -- ec3.shp_checkpoint_date is null AND--Doble check del estado anterior por si se olvidaron de bipear el picked up
+      -- s.shp_datetime_shipped_id is null AND--Verigica que no se bipeo en el xd
+      -- s.shp_datetime_delivered_id is null--Verifica que no se entregó
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,30,31;
+
+
+SELECT TOP 10 * FROM 
+WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec1
+WHERE shp_agency_id in ('15482','14206','387794','277703','63683','122929')
+
+--------------------------ENFOQUE DESDE SELLER
+SELECT
+  s.sit_site_id,
+  s.shp_shipment_id as shp_id,
+  --' ' as shp_shipment_id,
+  s.shp_sender_id as Seller_id,
+  s.shp_picking_type_id,
+  s.shp_status_id ,
+  s.shp_substatus_id,
+--a2.shp_add_city_name,
+--a2.shp_add_state_name,
+--a2.shp_add_address_line,
+--a2.shp_add_neighborhood_name,
+--a2.shp_add_latitude,
+--a2.shp_add_longitude,
+  a2.shp_add_zip_code,
+  ec1.shp_carrier_id as carrier_id, -- carrier_id
+  ec1.shp_agency_id as agency_id, -- id del place de drop_off
+  shp_company_name,--COmpany name
+  case when carrier_id=341979545 and  s.sit_site_id='MLB' then 'Pegaki'
+       when carrier_id=849817033 and  s.sit_site_id='MLB' then 'Kangu'
+       when carrier_id=1313953487 and s.sit_site_id='MCO' then 'Kangu'
+       when carrier_id=17243954 and  s.sit_site_id='MLM' then 'Kangu'
+       when carrier_id=542124431 and  s.sit_site_id='MLA' then 'Intermedio SRL'--Places
+       when carrier_id=1703373469 and  s.sit_site_id='MLC' then 'FLASHBOX'
+       when shp_company_name='DHL' then 'DHL'
+       when (agency_id like '%DO%' or shp_company_name='OCASA') and  s.sit_site_id='MLA' then 'Pick it'
+       when (char_length(agency_id)=4 or shp_company_name='Punto HOP')  and  s.sit_site_id='MLA' then 'Hop'
+       when carrier_id=10 then 'Propios Meli'
+       else 'Sin clasificar' end Agregador_manual,
+  ec6.shp_sub_status estado_not_del,
+  tms.TMS_TR_PROCES_TYPE Hub_picking_Type, --Datos de tms
+  tms.TMS_HUB_STATUS_ID  Hub_Status,
+  tms.tms_tr_logistic_center_id  LC ,
+  tms.shp_inb_reject_reason,
+  tms.SHP_INB_CARRIER_NAME,
+  min(s.shp_datetime_handling_id + interval '1' hour) as fecha_handling, -- fecha de generación de etiqueta que es despues que se aprobó el pago
+  min(ec1.shp_checkpoint_date + interval '1' hour) as fecha_dropoff, -- fecha de despacho en el place
+  min(ec2.shp_checkpoint_date + interval '1' hour) as fecha_pickup, -- fecha de colecta en el place
+  min(ec3.shp_checkpoint_date + interval '1' hour) as fecha_inhub, -- fecha de llegada en el XD
+  min(ec6.shp_checkpoint_date + interval '1' hour) as fecha_not_delivered, -- f
+  min(ec7.shp_checkpoint_date + interval '1' hour) as fecha_extraviado, -- fecha de entrega al buyer
+  min(ec8.shp_checkpoint_date + interval '1' hour) as fecha_returned, -- fecha de entrega al buyer
+  min(s.shp_datetime_shipped_id + interval '1' hour) as fecha_salidaXD, -- fecha de salida de XD
+  min(s.shp_datetime_delivered_id + interval '1' hour) as fecha_delivery, -- fecha de entrega al buyer
+  SUM(s.shp_order_cost) Order_cost,
+  SUM(s.shp_order_cost_usd) Order_Cost_USD,
+  sum((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) AS BPP_CASHOUT_USD,
+  1 as QTY,
+  'Details' as Source
+FROM WHOWNER.BT_SHP_SHIPMENTS as s
+  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec1 on ec1.shp_id = s.shp_shipment_id  and ec1.shp_status = 'ready_to_ship' and ec1.shp_sub_status = 'dropped_off'
+  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec2 on ec2.shp_id = s.shp_shipment_id  and ec2.shp_status = 'ready_to_ship' and ec2.shp_sub_status = 'picked_up'
+  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec3 on ec3.shp_id = s.shp_shipment_id  and ec3.shp_status = 'ready_to_ship' and ec3.shp_sub_status = 'in_hub'
+  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec6 on ec6.shp_id = s.shp_shipment_id  and ec6.shp_status = 'not_delivered'
+  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec7 on ec7.shp_id = s.shp_shipment_id  and ec7.shp_tracking_code in ('0623','0617','PL-0623','PL-0617') --Codigos lost y stolen
+  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS ec8 on ec8.shp_id = s.shp_shipment_id  and ec8.shp_tracking_code in ('0609','0633','0669') --Codigos de returned
+  LEFT JOIN WHOWNER.LK_SHP_COMPANIES com  on com.shp_company_id=ec1.shp_carrier_id
+  LEFT JOIN lk_shp_address a2 ON s.shp_sender_address = a2.shp_add_id
+  LEFT JOIN WHOWNER.BT_TMS_TRACKING tms on tms.shp_shipment_id=s.shp_shipment_id
+  LEFT JOIN WHOWNER.BT_CM_BUYER_PROTEC_PROGRAM B on s.shp_shipment_id=B.shp_shipment_id
+WHERE s.sit_site_id in ( 'MLB','MLA','MLM','MLC','MCO') AND --'MLC','MCO'
+      --s.shp_date_handling_id BETWEEN  '2021-01-01' and current_date -2 AND--  ${begin_date | type:date} and ${end_date | type:date} AND
+      --(ec1.shp_checkpoint_date + interval '1' hour)  
+      s.shp_datetime_handling_id BETWEEN  DATE '2021-01-01' and current_date -2 AND
+      s.shp_picking_type_id in ('cross_docking','xd_drop_off','drop_off','fulfillment') AND
+      s.shp_source_id = 'MELI' AND --Envios solo del marketplace
+      s.shp_shipping_mode_id = 'me2' AND
+      s.shp_type = 'forward' and
+
+      --ec1.shp_checkpoint_date is not null AND
+	  --agency_id in ('15482','14206','387794','277703','63683','122929')
+	  s.shp_sender_id in ('703236581','19366551')--,'147712068','145639153','731877901','459006470','646186277','483738182','630676811','477814830','61933821','190422619','119669697','240560402','136516429')
+      -- ec2.shp_checkpoint_date is null AND--Este campo muestra si fue colectado del place o no. Si es null es que no fue colectado
+      -- ec3.shp_checkpoint_date is null AND--Doble check del estado anterior por si se olvidaron de bipear el picked up
+      -- s.shp_datetime_shipped_id is null AND--Verigica que no se bipeo en el xd
+      -- s.shp_datetime_delivered_id is null--Verifica que no se entregó
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,30,31;
