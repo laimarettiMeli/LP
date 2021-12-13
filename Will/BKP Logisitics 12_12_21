@@ -1,0 +1,83 @@
+CREATE MULTISET VOLATILE TABLE Shipments_temp, NO LOG AS (
+  select ch.SHP_SHIPMENT_ID as id,max(ch.SHP_LG_SHIPMENT_CHECKPOINT_ID) check_id,max(rute.SHP_LG_ROUTE_ID) as rute_id
+from whowner.bt_shp_lg_shipment_checkpoints ch
+left join WHOWNER.BT_SHP_LG_SHIPMENTS_ROUTES rute ON rute.SHP_SHIPMENT_ID = ch.SHP_SHIPMENT_ID
+WHERE CAST(ch.shp_lg_last_updated  as date) BETWEEN (current_date -60) AND  (current_date - 1)
+group by 1
+)WITH DATA PRIMARY INDEX (id) ON COMMIT PRESERVE ROWS;
+
+delete from Temp_45.Logistics_LP_V2_STAGING
+where  CAST(LAST_UPDATED as date)  BETWEEN (current_date -60) AND  (current_date - 1);
+
+INSERT INTO Temp_45.Logistics_LP_V2_STAGING
+select DISTINCT
+chk.SHP_SHIPMENT_ID,
+shi.SIT_SITE_ID,
+shi.SHP_DATE_SHIPPED_ID,
+logs.SHP_LG_ROUTE_ID,
+chk.SHP_LG_FACILITY_ID,
+chk.SHP_LG_CLUSTER_ID ,
+chk.SHP_LG_STATUS,
+chk.SHP_LG_SUB_STATUS,
+shi.shp_logistic_center_id,
+(case when shi.SHP_PICKING_TYPE_ID in ('cross_docking','xd_drop_off') then 'XD'
+        when shi.SHP_PICKING_TYPE_ID in ('drop_off','drop_shipping') then 'DS'
+        when shi.SHP_PICKING_TYPE_ID = 'fulfillment' then 'FBM'
+        when shi.SHP_PICKING_TYPE_ID = 'self_service' then 'SELF_SERVICE'
+        else 'OTROS' end) as PICKING_TYPE ,
+(case  when (chk.SHP_LG_SUB_STATUS in ('Stolen','awaiting_police_report','stolen_awaiting_documentation')and logs.SHP_LG_ROUTE_ID is not null) then 'Stolen'
+      when (chk.SHP_LG_SUB_STATUS in ('Stolen','awaiting_police_report','stolen_awaiting_documentation') and logs.SHP_LG_ROUTE_ID is null) then 'Stolen on Way'
+       -- CHECK CON BILLING
+       when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('damaged','lost')and logs.SHP_LG_ROUTE_ID is not null) AND b.SHP_LG_PRE_INVOICE_DETAIL_TYPE_OPERATION = '-' then 'Lost on Route'
+      when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('damaged','lost')and logs.SHP_LG_ROUTE_ID is not null) then 'Lost at Station'
+      when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('damaged','lost')) then 'Lost at Station'
+      when (chk.SHP_LG_STATUS in ('on_way') and chk.SHP_LG_SUB_STATUS in ('damaged','lost'))  then 'Lost on Way'
+ when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('stale'))  then 'Stale at Station'
+ when (chk.SHP_LG_STATUS in ('on_way') and chk.SHP_LG_SUB_STATUS in ('stale'))  then 'Stale on Way'
+   else 'Otros' end ) as Clasificacion,
+(case when Clasificacion in ('Stolen') then COALESCE (CAST(logs.shp_lg_route_end_date as date), CAST(chk.shp_lg_last_updated as date))
+      else CAST(chk.shp_lg_last_updated as date) end) LAST_UPDATED , 
+comp.shp_company_name ,
+logs.SHP_LG_VEHICLE_PLATE_ID,
+logs.SHP_LG_VEHICLE_TYPE,
+logs.SHP_LG_DRIVER_ID ,
+initcap(dri.SHP_LG_DRIVER_FIRST_NAME)||' '||initcap(dri.SHP_LG_DRIVER_LAST_NAME) AS Driver,
+shi.shp_order_cost_usd ,
+ (shi.SHP_ITE_DIMENSION_MAX * shi.SHP_ITE_DIMENSION_MIN * shi.SHP_ITE_DIMENSION_MID) Volumen 
+ 
+from (  select ch.SHP_SHIPMENT_ID as id,max(ch.SHP_LG_SHIPMENT_CHECKPOINT_ID) check_id,max(rute.SHP_LG_ROUTE_ID) as rute_id
+        from whowner.bt_shp_lg_shipment_checkpoints ch
+        left join WHOWNER.BT_SHP_LG_SHIPMENTS_ROUTES rute ON rute.SHP_SHIPMENT_ID = ch.SHP_SHIPMENT_ID
+        group by 1
+) lpship
+    
+    left join WHOWNER.bt_shp_lg_shipment_checkpoints chk  on lpship.id = chk.SHP_SHIPMENT_ID and lpship.check_id = chk.SHP_LG_SHIPMENT_CHECKPOINT_ID
+    
+    left join WHOWNER.BT_SHP_SHIPMENTS shi  on lpship.id = shi.SHP_SHIPMENT_ID 
+    
+    left join WHOWNER.BT_SHP_LG_SHIPMENTS_ROUTES logs ON logs.SHP_SHIPMENT_ID = lpship.id and lpship.rute_id = logs.SHP_LG_ROUTE_ID
+    
+    left JOIN WHOWNER.LK_SHP_COMPANIES comp ON comp.SHP_company_ID = logs.shp_company_ID
+    
+    left JOIN WHOWNER.LK_SHP_LG_DRIVERS dri ON dri.SHP_LG_DRIVER_ID = logs.SHP_LG_DRIVER_ID
+
+    LEFT JOIN BT_SHP_LG_PRE_INVOICE_DETAIL b ON 
+            CAST(RIGHT(b.SHP_LG_PRE_INVOICE_DETAIL_DESCRIPTION,11) AS VARCHAR(100))=cast(chk.SHP_SHIPMENT_ID AS VARCHAR(100))
+            AND b.SHP_LG_PRE_INVOICE_DETAIL_TYPE_OPERATION = '-'
+
+WHERE chk.shp_lg_status in ('on_way','at_station')
+and  chk.shp_lg_sub_status in ('Stolen', 'stale','damaged','awaiting_police_report','lost','stolen_awaiting_documentation','problem_solving');
+-- and chk.SHP_SHIPMENT_ID IN(40998059764)
+drop table Shipments_temp;
+
+
+DROP TABLE Temp_45.Logistics_LP_V2;
+CREATE TABLE Temp_45.Logistics_LP_V2 as (
+SEL * FROM Temp_45.Logistics_LP_V2_STAGING
+UNION
+SEL * FROM Temp_45.Logistics_LP_V2_STAGING 
+) WITH DATA;
+
+
+
+GRANT ALL PRIVILEGES ON Temp_45.Logistics_LP_V2 TO wibezerra,juarodrigues,truiz,laimaretti,mmartorana,rodrgomez WITH GRANT OPTION
