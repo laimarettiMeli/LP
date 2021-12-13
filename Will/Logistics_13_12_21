@@ -1,17 +1,16 @@
-CREATE MULTISET VOLATILE TABLE Shipments_temp, NO LOG AS (
-  select ch.SHP_SHIPMENT_ID as id,max(ch.SHP_LG_SHIPMENT_CHECKPOINT_ID) check_id,max(rute.SHP_LG_ROUTE_ID) as rute_id
-from whowner.bt_shp_lg_shipment_checkpoints ch
-left join WHOWNER.BT_SHP_LG_SHIPMENTS_ROUTES rute ON rute.SHP_SHIPMENT_ID = ch.SHP_SHIPMENT_ID
+-- CREATE MULTISET VOLATILE TABLE Shipments_temp, NO LOG AS (
+--  select ch.SHP_SHIPMENT_ID as id,max(ch.SHP_LG_SHIPMENT_CHECKPOINT_ID) check_id,max(rute.SHP_LG_ROUTE_ID) as rute_id
+-- from whowner.bt_shp_lg_shipment_checkpoints ch
+-- left join WHOWNER.BT_SHP_LG_SHIPMENTS_ROUTES rute ON rute.SHP_SHIPMENT_ID = ch.SHP_SHIPMENT_ID
 -- WHERE CAST(ch.shp_lg_last_updated  as date) BETWEEN (current_date -60) AND  (current_date - 1)
-WHERE CAST(ch.shp_lg_last_updated  as date) >= '2019-04-01'
-group by 1
-)WITH DATA PRIMARY INDEX (id) ON COMMIT PRESERVE ROWS;
-
+-- WHERE CAST(ch.shp_lg_last_updated  as date) >= '2019-04-01'
+-- group by 1
+-- )WITH DATA PRIMARY INDEX (id) ON COMMIT PRESERVE ROWS;
 delete from Temp_45.Logistics_LP_V2_STAGING;
 -- where  CAST(LAST_UPDATED as date)  BETWEEN (current_date -60) AND  (current_date - 1);
 
 INSERT INTO Temp_45.Logistics_LP_V2_STAGING
--- CREATE TABLE Temp_45.LP_Test_Will as (
+
 select DISTINCT
 chk.SHP_SHIPMENT_ID,
 shi.SIT_SITE_ID,
@@ -30,8 +29,8 @@ shi.shp_logistic_center_id,
 (case  when (chk.SHP_LG_SUB_STATUS in ('Stolen','awaiting_police_report','stolen_awaiting_documentation')and logs.SHP_LG_ROUTE_ID is not null) then 'Stolen'
       when (chk.SHP_LG_SUB_STATUS in ('Stolen','awaiting_police_report','stolen_awaiting_documentation') and logs.SHP_LG_ROUTE_ID is null) then 'Stolen on Way'
        -- CHECK CON BILLING
-       when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('damaged','lost')and logs.SHP_LG_ROUTE_ID is not null) AND b.SHP_LG_PRE_INVOICE_DETAIL_TYPE_OPERATION = '-' then 'Lost on Route'
-      when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('damaged','lost')and logs.SHP_LG_ROUTE_ID is not null) then 'Lost at Station'
+       when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('damaged','lost') AND logs.SHP_LG_ROUTE_ID is not null AND b.SHP_LG_PRE_INVOICE_DETAIL_TYPE_OPERATION='-') then 'Lost on Route'
+      when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('damaged','lost') and logs.SHP_LG_ROUTE_ID is not null) then 'Lost at Station'
       when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('damaged','lost')) then 'Lost at Station'
       when (chk.SHP_LG_STATUS in ('on_way') and chk.SHP_LG_SUB_STATUS in ('damaged','lost'))  then 'Lost on Way'
  when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('stale'))  then 'Stale at Station'
@@ -64,13 +63,13 @@ from (  select ch.SHP_SHIPMENT_ID as id,max(ch.SHP_LG_SHIPMENT_CHECKPOINT_ID) ch
     left JOIN WHOWNER.LK_SHP_LG_DRIVERS dri ON dri.SHP_LG_DRIVER_ID = logs.SHP_LG_DRIVER_ID
 
     LEFT JOIN BT_SHP_LG_PRE_INVOICE_DETAIL b ON 
-            CAST(RIGHT(b.SHP_LG_PRE_INVOICE_DETAIL_DESCRIPTION,11) AS VARCHAR(100))=cast(chk.SHP_SHIPMENT_ID AS VARCHAR(100))
+            CAST(RIGHT(b.SHP_LG_PRE_INVOICE_DETAIL_DESCRIPTION,11) AS varchar(11))=TRIM(cast(chk.SHP_SHIPMENT_ID AS  varchar(11)))
             AND b.SHP_LG_PRE_INVOICE_DETAIL_TYPE_OPERATION = '-'
 
 WHERE chk.shp_lg_status in ('on_way','at_station')
 and  chk.shp_lg_sub_status in ('Stolen', 'stale','damaged','awaiting_police_report','lost','stolen_awaiting_documentation','problem_solving');
 -- and chk.SHP_SHIPMENT_ID IN(40998059764)
-drop table Shipments_temp;
+-- drop table Shipments_temp;
 
 
 DROP TABLE Temp_45.Logistics_LP_V2;
