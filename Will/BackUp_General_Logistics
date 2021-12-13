@@ -1,0 +1,30 @@
+create table temp_45.lp_logistics_test as(select * from Temp_45.Logistics_LP_V2 
+WHERE 1=1 qualify row_number() over(partition by SHP_SHIPMENT_ID order by SHP_ORDER_COST_USD DESC) = 1) with data;
+
+SELECT YEAR(last_updated) YY,MONTH(last_updated) MM,sum(SHP_ORDER_COST_USD) FROM temp_45.lp_logistics_test 
+GROUP BY 1,2
+ORDER BY 1,2
+
+
+SELECT YEAR(last_updated) YY,MONTH(last_updated) MM,sum(SHP_ORDER_COST_USD) FROM Temp_45.Logistics_LP_V2
+GROUP BY 1,2
+ORDER BY 1,2
+
+
+SELECT YEAR(last_updated) YY,MONTH(last_updated) MM,sum(SHP_ORDER_COST_USD) FROM Temp_45.LP_Test_Will
+GROUP BY 1,2
+ORDER BY 1,2
+
+
+---------------------------
+
+CREATE TABLE Temp_45.Logistics_LP_V2_BK AS (Select * from Temp_45.Logistics_LP_V2) WITH DATA;
+
+CREATE TABLE Temp_45.Logistics_LP_V2_STAGING_BK AS (Select * from Temp_45.Logistics_LP_V2_STAGING) WITH DATA;
+
+SELECT SHP_SHIPMENT_ID
+-- COUNT (*)
+FROM Temp_45.Logistics_LP_V2
+GROUP BY 1
+ORDER BY 2
+DESC
