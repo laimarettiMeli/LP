@@ -11,22 +11,45 @@ CREATE TABLE TEMP_45.LP_LM_DETAILS_MELI AS (
                                       logs.SHP_LG_VEHICLE_PLATE_ID AS PLATE,
                                       shp_lg_vehicle_type as Tipo_vehiculo,
                                       lshp.shp_lg_facility_id,
-                                      lshp.SHP_LG_CLUSTER_ID AS Cluster_ID
+                                      lshp.SHP_LG_CLUSTER_ID AS Cluster_ID,
+                                      CASt(dri.SHP_LG_DRIVER_DATE_CREATED as date) as SHP_LG_DRIVER_DATE_CREATED,
+                                      --CAMPOS PROMESAS
+                                      CAST(CMD.DATE_PROMISE_MELI AS DATE) AS Promise_Date,
+                                      --CAMPOS SHIPMENT
+                                      Semaforo_DLM,
+                                      Usuario_SalidaHUB,
+                                      Patente_SalidaHUB,
+                                      Fecha_DespachoHUB,
+                                      Dock_Despacho,
+                                      PALABRA_CLAVE,
+                                      Primer_SC,
+                                      Segundo_SC,-- ,distancia_rangos
+                                      -- DISTANCE_KM_Notif_y_Address
+                                      CASE
+                                      WHEN distance_km_notif_y_address IS NULL then '0- Null '
+                                      WHEN distance_km_notif_y_address * 1000 < 10 then '1- Menor a 10 metros'
+                                      WHEN distance_km_notif_y_address * 1000 < 100 then '2- Menor a 100 metros'
+                                      WHEN distance_km_notif_y_address * 1000 < 1000 then '3- Menor a 1 km'
+                                      WHEN distance_km_notif_y_address * 1000 < 10000 then '4- Menor a 10 km'
+                                      WHEN distance_km_notif_y_address * 1000 >= 10000 then '5- Mayor a 10 km'
+                                      ELSE '6- Otro' end distancia_rangos
                                       ,row_number() OVER(PARTITION BY shipment_id,ORD_ORDER_ID ORDER BY (BPP_CASHOUT_USD) DESC) as Fcy_2
                   FROM TEMP_45.LP_LASTMILE_01_VIEW SHP
                      LEFT JOIN WHOWNER.BT_SHP_LG_SHIPMENTS lshp ON lshp.shp_shipment_id = shp.shipment_id
                      LEFT JOIN BT_SHP_LG_SHIPMENTS_ROUTES logs ON logs.shp_shipment_id = shp.shipment_id
                      LEFT JOIN WHOWNER.LK_SHP_COMPANIES comp ON comp.SHP_company_ID = logs.shp_company_ID
                      LEFT JOIN LK_SHP_LG_DRIVERS dri ON dri.shp_lg_driver_id=logs.shp_lg_driver_id
+                     LEFT JOIN SCORING.SHIPPING_MAIN shpa ON shpa.shp_shipment_id= SHP.shipment_id
+                     LEFT JOIN SHIPMENT.CARRIER_MANAGEMENT_DETAIL CMD ON SHP.shipment_Id  = CMD.shp_shipment_id
                      
                     WHERE 
                     source<>'Totals'
                     -- AND date_shipped BETWEEN current_date-5 AND current_date-1
-                    AND date_shipped BETWEEN '2021-01-01' and current_date -1
+                    AND shp.date_shipped BETWEEN '2021-01-01' and current_date -1
                     AND c_carrier = 'MERCADO ENVIOS'
                     -- AND pais in ('MLM','MLA')
                 )WITH DATA;
---DROP TABLE TEMP_45.LP_LM_TOTALS_MELI
+--DROP TABLE TEMP_45.LP_LM_TOTALS_MELI;
 CREATE TABLE TEMP_45.LP_LM_TOTALS_MELI AS (        
                         SELECT 
         date_shipped as "Date bpp Parameter"
@@ -109,7 +132,22 @@ CREATE TABLE TEMP_45.LP_LM_TOTALS_MELI AS (
         ,PLATE
         ,Tipo_vehiculo
         ,shp_lg_facility_id
-        ,Cluster_ID
+        ,Cluster_ID,
+
+         CAST('1900-01-01' as DATE) as SHP_LG_DRIVER_DATE_CREATED,
+                                      --CAMPOS PROMESAS
+         CAST('1900-01-01' as DATE) AS Promise_Date,
+                                      --CAMPOS SHIPMENT
+                                      ' ' Semaforo_DLM,
+                                      ' ' Usuario_SalidaHUB,
+                                      ' ' Patente_SalidaHUB,
+                                      CAST('1900-01-01' as DATE) Fecha_DespachoHUB,
+                                      NULL Dock_Despacho,
+                                      NULL PALABRA_CLAVE,
+                                      ' ' Primer_SC,
+                                      ' ' Segundo_SC,
+                                      'NULL' distancia_rangos
+
         ,1 as Fcy_2
         FROM (
               SELECT 
@@ -187,14 +225,21 @@ CREATE TABLE TEMP_45.LP_LM_TOTALS_MELI AS (
 -- UNION DE LAS TABLAS
 
 CREATE TABLE temp_45.lp_lastmile_MELI_step_01 as (
-SEL 
-"Date bpp Parameter","Fraud?",Substatus_Clasification,"Culpability (std)",Fcy,Pais,picking_type,c_carrier,date_shipped,date_delivered,Total_Shipments,shipment_Id,ORD_ORDER_ID,date_bpp,
+SEL "Date bpp Parameter","Fraud?",Substatus_Clasification,"Culpability (std)",Fcy,Pais,picking_type,c_carrier,date_shipped,date_delivered,Total_Shipments,shipment_Id,ORD_ORDER_ID,date_bpp,
 status,substatus_id,substatus,BPP_CX,BPP_CASHOUT_USD,GMV,city,latitude,longitude,zip_code,addres_ref,SHP_LOGISTIC_CENTER_ID,cus_nickname_buy,cus_nickname_sel,DOM_DOMAIN_ID,VERTICAL,
 Tipo_fraude,has_pf_pnr_c_neto,has_pf_pnr_c_bruto,pnr_c_me_solved,pnr_c_claim_solved,has_pf_empty_box,has_claim,claims_PDD,Causa_BPP,has_bpp,bpp_amt,bpp_debt,claim_first_opened_date,
 culpability_sel,culpability_buy,culpability,SHP_ORIGIN,Push_Carrier,Tipo_Fallo,driver,SHP_LABEL_TRACKING_NUMBER,BPP_BUDGET,SHP_RECEIVER_ID,GEO_RCV_ADDRESS_ID,GEO_RCV_COUNTRY_NAME,
 GEO_RCV_STATE_NAME,GEO_RCV_CITY_NAME,GEO_RCV_ZIP_CODE,GEO_RCV_ZIP_CODE_SHORT,TMS_BUYER_INFO_ADDRESS_LINE,TMS_BUYER_INFO_ZIP_CODE,TMS_BUYER_INFO_NAME,TMS_BUYER_INFO_ID,SHP_OUT_ADDED_BY_USER,
 CW_GEO_RCV_LONGITUDE,CW_GEO_RCV_LATITUDE,F_Clasification,Source,TotalGMV,DRIVER_NAME,DRIVER_ID,MLP,CODIGO_TRANSPORTADORA,DOCUMENTO,NUM_DOCUMENTO,DRIVER_STATUS,PLATE,Tipo_vehiculo,
-SHP_LG_FACILITY_ID,Cluster_ID,Fcy_2
+SHP_LG_FACILITY_ID,Cluster_ID
+,SHP_LG_DRIVER_DATE_CREATED,Promise_Date
+,Semaforo_DLM,Usuario_SalidaHUB
+,Patente_SalidaHUB,Fecha_DespachoHUB
+,Dock_Despacho
+,PALABRA_CLAVE
+,Primer_SC,Segundo_SC
+,distancia_rangos
+,Fcy_2
 FROM TEMP_45.LP_LM_DETAILS_MELI
 
 UNION
@@ -205,7 +250,15 @@ Tipo_fraude,has_pf_pnr_c_neto,has_pf_pnr_c_bruto,pnr_c_me_solved,pnr_c_claim_sol
 culpability_sel,culpability_buy,culpability,SHP_ORIGIN,Push_Carrier,Tipo_Fallo,driver,SHP_LABEL_TRACKING_NUMBER,BPP_BUDGET,SHP_RECEIVER_ID,GEO_RCV_ADDRESS_ID,GEO_RCV_COUNTRY_NAME,
 GEO_RCV_STATE_NAME,GEO_RCV_CITY_NAME,GEO_RCV_ZIP_CODE,GEO_RCV_ZIP_CODE_SHORT,TMS_BUYER_INFO_ADDRESS_LINE,TMS_BUYER_INFO_ZIP_CODE,TMS_BUYER_INFO_NAME,TMS_BUYER_INFO_ID,SHP_OUT_ADDED_BY_USER,
 CW_GEO_RCV_LONGITUDE,CW_GEO_RCV_LATITUDE,F_Clasification,Source,TotalGMV,DRIVER_NAME,DRIVER_ID,MLP,CODIGO_TRANSPORTADORA,DOCUMENTO,NUM_DOCUMENTO,DRIVER_STATUS,PLATE,Tipo_vehiculo,
-SHP_LG_FACILITY_ID,Cluster_ID,Fcy_2
+SHP_LG_FACILITY_ID,Cluster_ID
+,SHP_LG_DRIVER_DATE_CREATED,Promise_Date
+,Semaforo_DLM,Usuario_SalidaHUB
+,Patente_SalidaHUB,Fecha_DespachoHUB
+,Dock_Despacho
+,PALABRA_CLAVE
+,Primer_SC,Segundo_SC
+,distancia_rangos
+,Fcy_2
 FROM TEMP_45.LP_LM_TOTALS_MELI
 ) WITH DATA;
 
@@ -492,7 +545,7 @@ WHEN 'SMG2' THEN 'Juaz de Fora'
 WHEN 'SSP19' THEN 'Guarulhos'
 WHEN 'SSP20' THEN 'Sorocaba'
 WHEN 'SSP21' THEN 'Mooca'
-WHEN 'SSC2' THEN 'Florian�polis'
+WHEN 'SSC2' THEN 'Florianopolis'
 WHEN 'SMG3' THEN 'Pouso Alegre'
 WHEN 'SMG4' THEN 'Ipatinga'
 WHEN 'SMG5' THEN 'Poios de Caldas'
