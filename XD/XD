@@ -1,12 +1,12 @@
 
---------------------------------------------------------------Query XD's
+-- ------------------------------------------------------------Query XD's
 -- Objetivo: Analizar todo lo que genere BPP cash out en el XD
 
 -- Desripcion: Se busca todo lo que tenga un in hub en la tabla CHK y no tenga una fecha shipped en la tabla TMS.
 --   * Verificar que no este con status delivered
 
------------------------------------------------------Creacion tabla Details
---DROP TABLE temp_45.LP_XD_Details;
+-- ---------------------------------------------------Creacion tabla Details
+-- DROP TABLE temp_45.LP_XD_Details;
 
 CREATE TABLE temp_45.LP_XD_Details as (
 SELECT
@@ -28,7 +28,7 @@ shp.SIT_SITE_ID
 --,TMS.TMS_TR_INB_INCLUDE_AT DATE_IN_HUB
 ,TMS_TR_DATE_TAG_CREATED -- Datetime de etiquetado
 ,shp.SHP_DATE_READY_TO_SHIP_ID
-,shp.SHP_DATE_DELIVERED_ID --Fecha real de entrega del envío (sin hora)
+,shp.SHP_DATE_DELIVERED_ID -- Fecha real de entrega del envío (sin hora)
 ,shp.SHP_DATE_NOT_DELIVERED_ID
 ,shp.SHP_DATE_SHIPPED_ID
 ,shp.SHP_DATE_CANCELLED_ID
@@ -36,7 +36,7 @@ shp.SIT_SITE_ID
 ,shp.SHP_LOGISTIC_CENTER_ID
 --,shp.SHP_RECEIVER_ID
 ,tms.TMS_TR_ESTIMATED_DATE_DELIVERY --Fecha esperada del envío
-,TMS_TR_ZONA_ID
+,TMS_TR_ZONA_ID -- Subcanalizacion
 --,TMS_TR_ZONA_NAME--Zona- Subcanalizacion
 ,TMS_TR_OPEN_PACKING_DATE--Datetime de creación del outbound TIENE QUE IR??????
 ,TMS_TR_OPEN_PACKING_USER--Array con los users que participaron del outbound
@@ -44,8 +44,11 @@ shp.SIT_SITE_ID
 ,TMS_TR_INB_DOCK_ID--Dock id de descarga
 ,TMS_TR_DIS_DOCK_ID--Dock Id de dispatch			
 ,TMS_TR_DIS_TRUCK_ID--Truck id de dispatch
-
-,SUM(shh.ODR_ITEM_DOL_UNIT_PRICE) ITME_PRICE
+--,TMS_TR_COLLECT_LIST_NUMBER --TMS_TR_COLLECT_LIST_NUMBER	ID del inbound
+--,TMS_TR_PACKINGLIST_NUMBER --TMS_TR_PACKINGLIST_NUMBER	ID del outbound
+,TMS_TR_CLOSE_PACKING_USER--user name del que lo puso en el pallet
+,SUM(f.BPP_CASHOUT) as BPP_CO
+,SUM(shh.ODR_ITEM_DOL_UNIT_PRICE) ITEM_PRICE
 ,SUM(shp.SHP_QUANTITY) ITEMS_QTY
 ,COUNT(DISTINCT shp.shp_shipment_id) QTY
 ,SUM(shp.SHP_ORDER_COST_USD) GMV
@@ -57,32 +60,39 @@ shp.SIT_SITE_ID
 FROM WHOWNER.BT_SHP_SHIPMENTS shp
 --  INNER JOIN WHOWNER.BT_CM_BUYER_PROTEC_PROGRAM b on b.shp_shipment_id=SHP.shp_shipment_id and ((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) > 0
   INNER JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk on chk.shp_id=shp.shp_shipment_id and chk.shp_sub_status='in_hub'
+  LEFT JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk_1 on chk_1.shp_id=shp.shp_shipment_id and chk_1.shp_sub_status='rejected_in_hub'
   LEFT JOIN WHOWNER.BT_TMS_TRACKING tms on tms.shp_shipment_id=shp.shp_shipment_id--TMS_TR_COLLECT_DATE
   --LEFT JOIN WHOWNER.LK_SHP_COMPANIES cpy on cpy.SHP_COMPANY_ID=shp.SHP_SERVICE_ID
   LEFT JOIN WHOWNER.LK_SHP_SHIPPING_SERVICES SERV ON SERV.shp_service_id=shp.shp_service_id
   LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA cus on shp.shp_sender_id=cus.CUS_CUST_ID
   LEFT JOIN WHOWNER.BT_SHP_SHIPPING_ITEMS shh on shh.shp_shipment_id=shp.shp_shipment_id AND shh.sit_site_id=shp.sit_site_id
-
+  LEFT JOIN SCORING.ORDERS_MAIN_ME f on f.ord_order_id=shh.shp_order_id
 WHERE
 
 chk.shp_checkpoint_date >  DATE '2020-01-01' AND 
 chk.shp_checkpoint_date <= current_date -2 AND
-shp.shp_picking_type_id in ('cross_docking') AND
-shp.shp_substatus_id in ('claimed_me','damaged','lost','N/A','stolen','authorized_by_carrier','in_hub','in_packing_list') AND
---shp.sit_site_id in ('MLA')
+chk_1.shp_checkpoint_date is null AND
+shp.shp_picking_type_id in ('cross_docking','xd_drop_off') AND
+shp.shp_substatus_id in 
+('claimed_me','damaged','lost','N/A','stolen','authorized_by_carrier','in_hub','in_packing_list','destroyed','stolen') AND
+-- shp.sit_site_id in ('MLA')
 shp.SHP_DATE_SHIPPED_ID is null AND
 shp.shp_status_id not in ('delivered') AND
---AND ((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) > 0
+-- AND ((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) > 0
 shp.SHP_SHIPPING_MODE_ID ='me2' AND
---SHP_SOURCE_ID = 'ON' AND
+-- SHP_SOURCE_ID = 'ON' AND
 shp.SHP_TYPE = 'forward'
-GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28)
+
+-- and shp.SHP_SHIPMENT_ID in (41014036624)
+
+ qualify row_number() OVER(PARTITION BY shp.SHP_SHIPMENT_ID,shh.shp_order_id ORDER BY (ITEM_PRICE) DESC)=1
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29)
 WITH DATA;
 
----------------------------------------------------------------------------------------------FIN DETAILS
+-- -------------------------------------------------------------------------------------------FIN DETAILS
 
------------------------------------------------------Creacion tabla Totals
---DROP TABLE temp_45.LP_XD_Totals;
+-- ---------------------------------------------------Creacion tabla Totals
+-- DROP TABLE temp_45.LP_XD_Totals;
 CREATE TABLE temp_45.LP_XD_Totals as (
 SELECT
 shp.SIT_SITE_ID
@@ -98,7 +108,7 @@ shp.SIT_SITE_ID
 ,CAST('1900-01-01' as DATE) SHP_DATETIME_CREATED_ID
 ,CAST('1900-01-01' as DATE) SHP_DATE_FIRST_PRINTED_ID
 ,CAST(chk.shp_checkpoint_date AS DATE) DATE_IN_HUB
---,CAST(TMS.TMS_TR_INB_INCLUDE_AT AS DATE) DATE_IN_HUB
+-- ,CAST(TMS.TMS_TR_INB_INCLUDE_AT AS DATE) DATE_IN_HUB
 ,CAST('1900-01-01' as DATE) TMS_TR_DATE_TAG_CREATED -- Datetime de etiquetado
 ,CAST('1900-01-01' as DATE) SHP_DATE_READY_TO_SHIP_ID
 ,CAST('1900-01-01' as DATE) SHP_DATE_DELIVERED_ID --Fecha real de entrega del envío (sin hora)
@@ -107,31 +117,36 @@ shp.SIT_SITE_ID
 ,CAST('1900-01-01' as DATE) SHP_DATE_CANCELLED_ID
 ,' ' cus_nickname --cus.cus_nickname--shp.SHP_SENDER_ID
 ,shp.SHP_LOGISTIC_CENTER_ID
---,' ' SHP_RECEIVER_ID
---,shp.SHP_RECEIVER_ID
+-- ,' ' SHP_RECEIVER_ID
+-- ,shp.SHP_RECEIVER_ID
 ,CAST('1900-01-01' as DATE) TMS_TR_ESTIMATED_DATE_DELIVERY --Fecha esperada del envío
 ,TMS_TR_ZONA_ID
---,TMS_TR_ZONA_NAME--Zona- Subcanalizacion
+-- ,TMS_TR_ZONA_NAME--Zona- Subcanalizacion
 ,CAST('1900-01-01' as DATE) TMS_TR_OPEN_PACKING_DATE--Datetime de creación del outbound TIENE QUE IR??????
 ,' ' TMS_TR_OPEN_PACKING_USER--Array con los users que participaron del outbound
---,TMS_TR_SHIPPED_USER -- Username del operario que despacho el paquete
+-- ,TMS_TR_SHIPPED_USER -- Username del operario que despacho el paquete
 ,0 TMS_TR_INB_DOCK_ID--Dock id de descarga
 ,0 TMS_TR_DIS_DOCK_ID--Dock Id de dispatch			
 ,' ' TMS_TR_DIS_TRUCK_ID--Truck id de dispatch
-,0 ITME_PRICE
+
+-- ,0 TMS_TR_COLLECT_LIST_NUMBER --TMS_TR_COLLECT_LIST_NUMBER	ID del inbound
+-- ,0 TMS_TR_PACKINGLIST_NUMBER
+,' ' TMS_TR_CLOSE_PACKING_USER
+,0 BPP_CO
+,0 ITEM_PRICE
 ,SUM(shp.SHP_QUANTITY) ITEMS_QTY
 ,COUNT(DISTINCT shp.shp_shipment_id) QTY
 ,SUM(shp.SHP_ORDER_COST_USD) GMV
 ,SUM(shp.SHP_ORDER_COST) GMV_LC
---,MIN(B.bpp_created_dt) as date_bpp
---,SUM((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) AS BPP_CASHOUT_USD
+-- ,MIN(B.bpp_created_dt) as date_bpp
+-- ,SUM((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) AS BPP_CASHOUT_USD
 ,'Totals' Source
 
 FROM WHOWNER.BT_SHP_SHIPMENTS shp
 --  INNER JOIN WHOWNER.BT_CM_BUYER_PROTEC_PROGRAM b on b.shp_shipment_id=SHP.shp_shipment_id and ((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) > 0
   INNER JOIN WHOWNER.BT_SHP_ELASTICSEARCH_CHECKPOINTS chk on chk.shp_id=shp.shp_shipment_id and chk.shp_sub_status='in_hub'
   LEFT JOIN WHOWNER.BT_TMS_TRACKING tms on tms.shp_shipment_id=shp.shp_shipment_id--TMS_TR_COLLECT_DATE
-  --LEFT JOIN WHOWNER.LK_SHP_COMPANIES cpy on cpy.SHP_COMPANY_ID=shp.SHP_SERVICE_ID
+  -- LEFT JOIN WHOWNER.LK_SHP_COMPANIES cpy on cpy.SHP_COMPANY_ID=shp.SHP_SERVICE_ID
   LEFT JOIN WHOWNER.LK_SHP_SHIPPING_SERVICES SERV ON SERV.shp_service_id=shp.shp_service_id
   LEFT JOIN WHOWNER.LK_CUS_CUSTOMERS_DATA cus on shp.shp_sender_id=cus.CUS_CUST_ID
 
@@ -139,18 +154,19 @@ WHERE
 
 chk.shp_checkpoint_date >  DATE '2020-01-01' AND 
 chk.shp_checkpoint_date <= current_date -2 AND
-shp.shp_picking_type_id in ('cross_docking') AND
---shp.shp_substatus_id in ('claimed_me','damaged','lost','N/A','stolen') AND
---shp.sit_site_id in ('MLA')
---shp.SHP_DATE_SHIPPED_ID is null AND
---shp.shp_status_id not in ('delivered') AND
---AND ((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) > 0
+shp.shp_picking_type_id in ('cross_docking','xd_drop_off') AND
+-- shp.shp_substatus_id in ('claimed_me','damaged','lost','N/A','stolen') AND
+-- shp.sit_site_id in ('MLA')
+-- shp.SHP_DATE_SHIPPED_ID is null AND
+-- shp.shp_status_id not in ('delivered') AND
+-- AND ((B.bpp_amt_doll) - (B.bpp_instant_recovery_amt_doll) - (B.bpp_late_recoveries_amt_doll)) > 0
 shp.SHP_SHIPPING_MODE_ID ='me2' AND
---SHP_SOURCE_ID = 'ON' AND
+-- SHP_SOURCE_ID = 'ON' AND
 shp.SHP_TYPE = 'forward'
-GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29) 
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30) 
+
 WITH DATA;
-------------------------------------------------INSERT INTO LP_XD final
+-- ----------------------------------------------INSERT INTO LP_XD final
 DROP TABLE temp_45.LP_XD;
 CREATE TABLE temp_45.LP_XD as (
 
@@ -160,15 +176,41 @@ SELECT * FROM temp_45.LP_XD_Totals
 
 ) WITH DATA;
 
-----------------------------------------------DROPEO TABLAS AUXILIARES
+-- --------------------------------------------DROPEO TABLAS AUXILIARES
 DROP TABLE temp_45.LP_XD_Details;
 DROP TABLE temp_45.LP_XD_Totals;
-
-
---SELECT SOURCE,YEAR(DATE_IN_HUB),MONTH(DATE_IN_HUB), SUM(GMV) FROM temp_45.LP_XD GROUP BY 1,2,3 ORDER BY 1,2,3
-
---SELECT COUNT(*) FROM temp_45.LP_XD_Details;
---SELECT COUNT(*) FROM temp_45.LP_XD_Totals;
-
---SELECT DISTINCT SHP_SUBSTATUS_ID FROM temp_45.LP_XD
---SELECT COUNT(*) FROM temp_45.LP_XD
+-- --------------------------------------------DROPEO OUTLIERS FACILITY
+DELETE FROM temp_45.LP_XD 
+WHERE SOURCE <>'Totals'
+AND
+ sit_site_id||'-'||SHP_LOGISTIC_CENTER_ID IN ('MCO-BRXSP5','MCO-Null','MLA-XSP4','MLA-XRJ1','MLA-XPR1','MLA-XMG1','MLA-XD_CAJAMAR','MLA-VILA_GUILHERME','MLA-MXXEM1','MLA-COXBG1','MLA-CLXRM1','MLA-CAMPINAS','MLA-BRXSP6','MLA-BRXSP5','MLA-BRXSC2','MLA-ARENA','MLB-XPR1_TEST','MLB-XMG1_TEST','MLB-XD_CAJAMAR_TEST','MLB-VILA_GUILHERME_TEST','MLB-SARANDI','MLB-SAM1','MLB-MXXQR1','MLB-MXXMT1','MLB-MXXMD1','MLB-MXXGD1','MLB-MXXEM1','MLB-EPE2','MLB-EPE1','MLB-EPA1','MLB-COXBG1','MLB-CLXRM1','MLB-BRXSP8','MLB-BRXPE1','MLB-BRXBA1','MLB-BRSP02','MLB-ARXCF1','MLB-ARBA01','MLC-VILA_GUILHERME','MLC-MXXEM1','MLC-COXBG1','MLC-CAMPINAS','MLC-BRXSP5','MLC-ARXCF1','MLC-Null','MLM-VILA_GUILHERME','MLM-MXXEM1_TEST','MLM-CAMPINAS','MLM-BRXSP6','MLM-BRXSP5','MLM-ARXCF1','MLM-ARENA','MLM-ARBA01','MLM-Null')
+OR SHP_LOGISTIC_CENTER_ID IS NULL OR
+CASE 
+WHEN SHP_LOGISTIC_CENTER_ID LIKE ('%TEST%') THEN 'FALSE'
+WHEN SIT_SITE_ID='MCO' AND SHP_LOGISTIC_CENTER_ID='COXME1' THEN 'TRUE'
+WHEN SIT_SITE_ID='MCO' AND LEFT(SHP_LOGISTIC_CENTER_ID,2)='CO' THEN 'TRUE'
+WHEN SIT_SITE_ID='MLA' AND LEFT(SHP_LOGISTIC_CENTER_ID,2)='AR' 
+						AND LEFT(SHP_LOGISTIC_CENTER_ID,5)<>'ARENA' THEN 'TRUE'
+WHEN SIT_SITE_ID='MLA' AND SHP_LOGISTIC_CENTER_ID='SARANDI' THEN 'TRUE'
+	
+WHEN SIT_SITE_ID='MLC' AND LEFT(SHP_LOGISTIC_CENTER_ID,2)='CL' THEN 'TRUE'
+	
+WHEN SIT_SITE_ID='MLM' AND LEFT(SHP_LOGISTIC_CENTER_ID,3)='MXX' THEN 'TRUE'
+    
+WHEN SIT_SITE_ID='MLB' AND SHP_LOGISTIC_CENTER_ID IN 
+      ('BRXSP6','BRXSP5','BRXSC2','BRXSP7','BRXG01','BRXES1','BRXGO1') THEN 'TRUE'
+WHEN SIT_SITE_ID='MLB' AND SHP_LOGISTIC_CENTER_ID='ARENA' THEN 'TRUE'
+WHEN SIT_SITE_ID='MLB' AND SHP_LOGISTIC_CENTER_ID='CAMPINAS' THEN 'TRUE'
+WHEN SIT_SITE_ID='MLB' AND SHP_LOGISTIC_CENTER_ID='VILA_GUILHERME' THEN 'TRUE'
+WHEN SIT_SITE_ID='MLB' AND SHP_LOGISTIC_CENTER_ID='XMG1' THEN 'TRUE'
+WHEN SIT_SITE_ID='MLB' AND SHP_LOGISTIC_CENTER_ID='XPR1' THEN 'TRUE'
+WHEN SIT_SITE_ID='MLB' AND SHP_LOGISTIC_CENTER_ID='XRJ1' THEN 'TRUE'
+WHEN SIT_SITE_ID='MLB' AND SHP_LOGISTIC_CENTER_ID='XD_CAJAMAR' THEN 'TRUE'
+WHEN SIT_SITE_ID='MLB' AND SHP_LOGISTIC_CENTER_ID='XSP4' THEN 'TRUE'
+ELSE 'FALSE'
+END = 'FALSE';
+-- --------------------------------------------DROPEO OUTLIERS CARRIERS
+DELETE FROM temp_45.LP_XD 
+WHERE SOURCE <>'Totals' AND
+sit_site_id||'_'||SHP_CARRIER_ID_AJUS
+in ('MCO_N/A','MLA_N/A','MLA_FLEX','MLA_CORREIOS','MLA_IFLOW','MLA_TRANSFOLHA','MLA_SEQUOIA','MLA_MERCADO ENVIOS','MLB_NOWLOG','MLB_CEVA','MLB_OCASA','MLB_N/A','MLC_N/A','MLM_N/A')
