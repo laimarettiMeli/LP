@@ -1,0 +1,65 @@
+CREATE MULTISET VOLATILE TABLE Transferred, NO LOG AS (
+select ch.SHP_SHIPMENT_ID , ch.SHP_LG_STATUS, ch.SHP_LG_SUB_STATUS , min(ch.shp_lg_last_updated) as shp_lg_last_updated
+from WHOWNER.bt_shp_lg_shipment_checkpoints ch
+WHERE ch.shp_lg_sub_status in ('transferred')
+and ch.shp_lg_status in ('on_route')
+and CAST(ch.shp_lg_last_updated  as date) BETWEEN '2021-01-01' AND  (current_date -1)
+group by 1,2,3 )WITH DATA PRIMARY INDEX (SHP_SHIPMENT_ID) ON COMMIT PRESERVE ROWS;
+
+CREATE MULTISET VOLATILE TABLE Shipments_temp, NO LOG AS (
+select chk.SHP_SHIPMENT_ID as id,max(chk.SHP_LG_SHIPMENT_CHECKPOINT_ID) check_id
+from whowner.bt_shp_lg_shipment_checkpoints chk
+Where EXISTS (SELECT 1 FROM Transferred trl WHERE trl.shp_shipment_id=chk.SHP_SHIPMENT_ID)
+group by 1
+)WITH DATA PRIMARY INDEX (id) ON COMMIT PRESERVE ROWS;
+
+
+--DROP TABLE TEMP_45.LP_AMBULANCE;
+CREATE TABLE TEMP_45.LP_AMBULANCE AS
+(
+select DISTINCT
+chk.SHP_SHIPMENT_ID,
+shi.SIT_SITE_ID,
+shi.SHP_DATE_SHIPPED_ID,
+chk.SHP_LG_FACILITY_ID,
+chk.SHP_LG_ROUTE_ID,
+chk.SHP_LG_CLUSTER_ID,
+chk.SHP_LG_STATUS,
+chk.SHP_LG_SUB_STATUS as status_actual,
+shi.shp_logistic_center_id,
+(case when shi.SHP_PICKING_TYPE_ID in ('cross_docking','xd_drop_off') then 'XD'
+        when shi.SHP_PICKING_TYPE_ID in ('drop_off','drop_shipping') then 'DS'
+        when shi.SHP_PICKING_TYPE_ID = 'fulfillment' then 'FBM'
+        when shi.SHP_PICKING_TYPE_ID = 'self_service' then 'SELF_SERVICE'
+        else 'OTROS' end) as PICKING_TYPE,
+        (case  when (chk.SHP_LG_SUB_STATUS in ('Stolen','awaiting_police_report','stolen_awaiting_documentation')and chk.SHP_LG_ROUTE_ID is not null) then 'Stolen'
+      when (chk.SHP_LG_SUB_STATUS in ('Stolen','awaiting_police_report','stolen_awaiting_documentation') and chk.SHP_LG_ROUTE_ID is null) then 'Stolen on Way' 
+  when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('lost')and chk.SHP_LG_ROUTE_ID is not null) then 'Lost on Route'
+  when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('lost')) then 'Lost at Station'
+  when (chk.SHP_LG_STATUS in ('at_station') and chk.SHP_LG_SUB_STATUS in ('damaged_on_route')) then 'Damaged On Route'
+  else 'Otros' end ) as Clasificacion,
+shi.shp_order_cost_usd,
+rot.SHP_LG_VEHICLE_PLATE_ID AS PLATE,
+rot.shp_lg_vehicle_type as Tipo_veículo,
+comp.shp_company_name AS MLP,
+UPPER(dri.SHP_LG_DRIVER_FIRST_NAME) ||' '|| UPPER(dri.SHP_LG_DRIVER_LAST_NAME) AS DRIVER_NAME,
+dri.SHP_LG_DRIVER_ID AS DRIVER_ID,
+dri.SHP_LG_DRIVER_IDENTIF_ID AS NUM_DOCUMENTO,
+dri.SHP_LG_DRIVER_STATUS AS DRIVER_STATUS,
+trl.SHP_LG_STATUS as Status_Transferred,
+trl.SHP_LG_SUB_STATUS as Sub_status_Transferred,
+CAST(trl.shp_lg_last_updated as date) as Transferred_Date,
+CAST(chk.shp_lg_last_updated as date) as LAST_UPDATED
+
+from Shipments_temp lpship
+left join WHOWNER.bt_shp_lg_shipment_checkpoints chk  on lpship.id = chk.SHP_SHIPMENT_ID and lpship.check_id = chk.SHP_LG_SHIPMENT_CHECKPOINT_ID
+left join WHOWNER.BT_SHP_SHIPMENTS shi  on lpship.id = shi.SHP_SHIPMENT_ID 
+left join Transferred trl on trl.shp_shipment_id = chk.SHP_SHIPMENT_ID
+left join BT_SHP_LG_SHIPMENTS_ROUTES rot on rot.shp_lg_route_ID = chk.SHP_LG_ROUTE_ID
+left join WHOWNER.LK_SHP_COMPANIES comp on comp.SHP_company_ID = rot.shp_company_ID
+left join LK_SHP_LG_DRIVERS dri on dri.shp_lg_driver_id = rot.shp_lg_driver_id
+
+WHERE chk.shp_lg_sub_status IN ('awaiting_police_report','damaged_on_route','lost','missrouted','stolen','stolen_awaiting_documentation')
+)
+WITH DATA;
+GRANT ALL PRIVILEGES ON TEMP_45.LP_AMBULANCE TO wibezerra,juarodrigues,truiz,laimaretti,mmartorana WITH GRANT OPTION;
